@@ -74,13 +74,11 @@
 
   .note{padding:14px 16px;color:var(--mute);font-size:14px}
   .note b{color:var(--ink);font-weight:500}
-  .note.actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;border-bottom:1px solid var(--line)}
-  .note.actions span{flex:1 1 260px;font-size:13px}
   a.numlink{color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent)}
   a.numlink:hover{border-bottom-style:solid}
-  a.btn{display:inline-block;padding:9px 14px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:#fff;text-decoration:none;font-size:14px;white-space:nowrap}
-  a.btn:hover{opacity:.9}
-  a.btn:focus-visible,a.numlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  a.numlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.copy{padding:2px 9px;font-size:12px;border-radius:999px;color:var(--mute);margin-left:-4px}
+  button.copy:hover{color:var(--accent)}
   .frame-wrap{background:var(--frame-bg)}
   iframe{display:block;width:100%;height:640px;border:0}
   .empty{padding:48px 0;text-align:center;color:var(--mute)}
@@ -277,17 +275,16 @@
   function renderItdida(el, n, reason) {
     var head = $(".card-head", el);
     var num = $(".num", head);
-    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
+    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>' +
+      '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>';
     $(".chip", head).outerHTML = chip("itdida", "now");
-    $('[data-role="meta"]', head).textContent = "nextsls 无记录,改从 itdida 读取";
+    $('[data-role="meta"]', head).textContent = "nextsls 无记录,点单号在 itdida 查询";
     $('[data-role="body"]', el).innerHTML =
-      '<div class="note actions"><a class="btn" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener">在 itdida 打开查询(单号已填)</a>' +
-      '<button type="button" data-role="copy">复制单号</button>' +
-      '<span>点单号或按钮新标签打开,滑一次验证码即可。下方内嵌页在部分浏览器里点查询会被送回首页,那是它的会话限制。</span></div>' +
+      '<div class="note">点单号新标签打开,滑一次验证码即可。下方内嵌页在部分浏览器里点查询会被送回首页,那是它的会话限制。</div>' +
       '<div class="frame-wrap"><iframe src="' + esc(itdidaUrl(n)) + '" title="itdida ' + esc(n) + '" referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
     var copy = $('[data-role="copy"]', el);
     copy.addEventListener("click", function () {
-      var done = function (ok) { copy.textContent = ok ? "已复制" : "复制失败"; setTimeout(function () { copy.textContent = "复制单号"; }, 1500); };
+      var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
     });
   }
