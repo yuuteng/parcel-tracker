@@ -80,8 +80,6 @@
   a.numlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   button.copy{padding:2px 9px;font-size:12px;border-radius:999px;color:var(--mute);margin-left:-4px}
   button.copy:hover{color:var(--accent)}
-  .frame-wrap{background:var(--frame-bg)}
-  iframe{display:block;width:100%;height:640px;border:0}
   .empty{padding:48px 0;text-align:center;color:var(--mute)}
   .leaflet-popup-content{font:13px "IBM Plex Sans",sans-serif;margin:8px 10px}
   .leaflet-popup-content .mono{color:var(--mute);display:block;font-size:12px}
@@ -117,7 +115,7 @@
   // paint needs no geocoding round-trips. Anything else goes to Nominatim once
   // and is cached in localStorage.
   var KNOWN = {
-    "深圳": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
+    "深圳": [22.5446, 114.0546], "深圳总部": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
     "玉门东": [39.8152, 97.9201], "鄯善": [42.2914, 90.6423], "阿拉山口": [45.3632, 82.4341],
     "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [54.7751, 69.0978],
     "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677],
@@ -153,6 +151,55 @@
     });
   }
 
+  // ---- itdida: one request in flight at a time, up to 10 numbers per call ----
+  var itPending = [], itTimer = null, itBusy = false;
+  function fetchItdida(n) {
+    return new Promise(function (res, rej) {
+      itPending.push({ n: n, res: res, rej: rej });
+      if (!itTimer) itTimer = setTimeout(function () { itTimer = null; itFlush(); }, 250);
+    });
+  }
+  // The API answers 503 to a second request within about a second, so calls
+  // are spaced out and one failed batch is retried once.
+  function itFlush() {
+    if (itBusy || !itPending.length) return;
+    itBusy = true;
+    var batch = itPending.splice(0, 10);
+    var url = "https://yen.itdida.com/itdida-api/queryTracks?no=" + encodeURIComponent(batch.map(function (b) { return b.n; }).join(","));
+    function call() {
+      return fetch(url, { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error("itdida HTTP " + r.status);
+        return r.json();
+      });
+    }
+    call().catch(function () { return new Promise(function (res) { setTimeout(res, 2000); }).then(call); })
+      .then(function (j) {
+        var byNo = {};
+        (j && j.data || []).forEach(function (item) { byNo[String(item.no).toUpperCase()] = item; });
+        batch.forEach(function (b) {
+          try { b.res(itdidaShipment(b.n, byNo[b.n.toUpperCase()])); } catch (e) { b.rej(e); }
+        });
+      }).catch(function (e) {
+        batch.forEach(function (b) { b.rej(e); });
+      }).then(function () { setTimeout(function () { itBusy = false; itFlush(); }, 1200); });
+  }
+  function itdidaShipment(n, item) {
+    var tracks = item && Array.isArray(item.trackList) ? item.trackList : [];
+    if (!tracks.length) { var e = new Error(item && item.errorMsg || "itdida 无记录"); e.notFound = true; throw e; }
+    tracks.sort(function (a, b) { return String(b.time).localeCompare(String(a.time)); });
+    var d = item.detail || {};
+    return {
+      source: "itdida", link: itdidaUrl(n),
+      status: tracks[0].desc || "有轨迹", statusCls: "warn",
+      country: d.guoJia || "", postcode: "", parcel_count: d.numOfUnits || 0,
+      outer_carrier_code: item.zhuanDanHao || "",
+      traces: tracks.map(function (t) {
+        var place = t.localtion || [t.eventCity, t.eventProvince, t.eventCountry].filter(Boolean).join(", ");
+        return { time: String(t.time || "").replace("T", " ").slice(0, 19), info: t.desc || t.eventCodeDesc || "", place: place || null };
+      })
+    };
+  }
+
   // ---- place extraction from free-text events ----
   var SKIP = /已下单|已发运|装柜|班列|label|created|派送|签收|清关|海关|customs|delivered|out for/i;
   function placeOf(info) {
@@ -167,6 +214,7 @@
     if (m) return clean(m[1]);
     return null;
   }
+  function placeOfTrace(t) { return t.place || placeOf(t.info); }
   function clean(s) {
     return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
   }
@@ -226,13 +274,13 @@
   }
 
   function renderShipment(el, n, s) {
-    var st = STATUS[s.status] || [s.status || "未知", ""];
+    var st = s.source === "itdida" ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
     var head = $(".card-head", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
 
     // Carrier tracking link on the number itself (UPS / DHL / FedEx).
-    var link = carrierUrl(s.outer_carrier_code, n);
-    if (link) $(".num", head).outerHTML = '<a class="num mono numlink" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
+    var link = s.link || carrierUrl(s.outer_carrier_code, n);
+    if (link) $(".num", head).outerHTML = '<a class="num mono numlink" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.source || s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
 
     // Days since the first event (usually 已下单); stops counting once delivered.
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
@@ -241,6 +289,7 @@
     $(".chip", head).outerHTML = '<span class="chip ' + st[1] + '">' + esc(st[0]) + (days != null ? ' <b class="mono">' + days + '</b> 天' : "") + '</span>';
 
     var meta = [];
+    if (s.source) meta.push(s.source);
     if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
     var destText = s.country ? countryEn(s.country) + (s.postcode ? " " + s.postcode : "") : "";
     if (destText) meta.push(destText);
@@ -252,7 +301,7 @@
       if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
     });
     var rows = traces.map(function (t, i) {
-      var p = placeOf(t.info);
+      var p = placeOfTrace(t);
       return '<tr' + (i === 0 ? ' class="now"' : '') + ' data-i="' + i + '"><td class="t mono">' + esc(t.time) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
     }).join("");
     var body = $('[data-role="body"]', el);
@@ -271,8 +320,9 @@
 
     // chronological order for the line: API returns newest first
     var ordered = traces.slice().reverse();
-    var jobs = ordered.map(function (t) { var p = placeOf(t.info); return p ? geocode(p).then(function (ll) { return ll ? { ll: ll, t: t, place: p } : null; }) : Promise.resolve(null); });
-    var destQ = s.postcode && s.country ? geocode(s.postcode + " " + countryEn(s.country)) : Promise.resolve(null);
+    var jobs = ordered.map(function (t) { var p = placeOfTrace(t); return p ? geocode(p).then(function (ll) { return ll ? { ll: ll, t: t, place: p } : null; }) : Promise.resolve(null); });
+    var destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
+    var destQ = destName ? geocode(destName) : Promise.resolve(null);
 
     Promise.all(jobs.concat([destQ])).then(function (res) {
       var dest = res.pop();
@@ -280,7 +330,7 @@
       // collapse consecutive duplicates (same station reported twice)
       pts = pts.filter(function (p, i) { return i === 0 || p.ll[0] !== pts[i - 1].ll[0] || p.ll[1] !== pts[i - 1].ll[1]; });
       var note = $('[data-role="geo-note"]', el);
-      var missing = ordered.filter(function (t) { return placeOf(t.info); }).length - pts.length;
+      var missing = ordered.filter(function (t) { return placeOfTrace(t); }).length - pts.length;
       if (note) note.textContent = pts.length ? (missing > 0 ? missing + " 个站名未能定位" : "") : "轨迹中没有可定位的地点";
       if (!pts.length) return;
       var line = pts.map(function (p) { return p.ll; });
@@ -295,10 +345,10 @@
       if (dest) {
         L.polyline([line[line.length - 1], dest], { color: "#2458c8", weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
         L.circleMarker(dest, { radius: 7, color: "#2458c8", fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
-          .bindPopup('<b>目的地</b><span class="mono">' + esc(countryEn(s.country) + " " + s.postcode) + '</span>');
+          .bindPopup('<b>目的地</b><span class="mono">' + esc(destName) + '</span>');
         bounds.extend(dest);
       }
-      map.fitBounds(bounds.pad(0.18));
+      map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
     });
   }
 
@@ -309,11 +359,10 @@
     var num = $(".num", head);
     num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>';
-    $(".chip", head).outerHTML = chip("itdida", "now");
-    $('[data-role="meta"]', head).textContent = "nextsls 无记录,点单号在 itdida 查询";
+    $(".chip", head).outerHTML = chip("无记录", "");
+    $('[data-role="meta"]', head).textContent = "nextsls 和 itdida 都没有这个单号";
     $('[data-role="body"]', el).innerHTML =
-      '<div class="note">点单号新标签打开,滑一次验证码即可。下方内嵌页在部分浏览器里点查询会被送回首页,那是它的会话限制。</div>' +
-      '<div class="frame-wrap"><iframe src="' + esc(itdidaUrl(n)) + '" title="itdida ' + esc(n) + '" referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
+      '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
     var copy = $('[data-role="copy"]', el);
     copy.addEventListener("click", function () {
       var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
@@ -331,7 +380,13 @@
     if (!numbers.length) { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; stamp(); return; }
     numbers.forEach(function (n) {
       var el = shell(n); list.appendChild(el);
-      fetchShipment(n).then(function (s) { renderShipment(el, n, s); })
+      fetchShipment(n)
+        .catch(function (e) {
+          if (!e.notFound) throw e;
+          $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
+          return fetchItdida(n);
+        })
+        .then(function (s) { renderShipment(el, n, s); })
         .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
     });
     stamp();
