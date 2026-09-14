@@ -49,8 +49,7 @@
   .num{font-size:16px;font-weight:600}
   .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)}
-  .chip.days{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:1px 9px}
-  .chip.days b{font-weight:600;font-size:13px;margin-right:2px}
+  .chip b{font-weight:600;font-size:13px;margin-left:5px;margin-right:1px}
   .meta{color:var(--mute);font-size:13px}
   .spacer{flex:1}
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
@@ -239,7 +238,7 @@
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
     var last = parseTime(traces.length ? traces[0].time : null);
     var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
-    $(".chip", head).outerHTML = chip(st[0], st[1]) + (days != null ? '<span class="chip days"><b class="mono">' + days + '</b> 天' + (s.status === "delivered" ? "送达" : "在途") + '</span>' : "");
+    $(".chip", head).outerHTML = '<span class="chip ' + st[1] + '">' + esc(st[0]) + (days != null ? ' <b class="mono">' + days + '</b> 天' : "") + '</span>';
 
     var meta = [];
     if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
