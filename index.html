@@ -107,7 +107,7 @@
   "use strict";
   var APP = "642e7f7573f04222943d090e";
   var KEY = "parcel-tracker.numbers.v1";
-  var GEO_KEY = "parcel-tracker.geo.v1";
+  var GEO_KEY = "parcel-tracker.geo.v2";
   var SEED = ["1ZH870646814645817", "1ZH870646837776197", "2806407155"];
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "warn"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
@@ -173,23 +173,40 @@
   // ---- geocoding with a serial queue, 1.1 s apart, cached ----
   var geoCache = read(GEO_KEY, {});
   var queue = [], busy = false;
-  function geocode(name) {
+  // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
+  // stations come from KNOWN without a network call.
+  function lookup(name) {
     var key = name.toUpperCase();
-    if (KNOWN[key]) return Promise.resolve(KNOWN[key]);
-    if (KNOWN[name]) return Promise.resolve(KNOWN[name]);
+    var k = KNOWN[key] || KNOWN[name];
+    if (k) return Promise.resolve({ ll: k, town: null });
     if (geoCache[key] !== undefined) return Promise.resolve(geoCache[key]);
     return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
   }
+  function geocode(name) { return lookup(name).then(function (r) { return r ? r.ll : null; }); }
   function pump() {
     if (busy || !queue.length) return;
     busy = true;
     var job = queue.shift();
-    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
-      .then(function (a) { var p = a && a[0] ? [parseFloat(a[0].lat), parseFloat(a[0].lon)] : null; geoCache[job.key] = p; store(GEO_KEY, geoCache); job.res(p); })
+      .then(function (a) {
+        var hit = a && a[0], ad = hit && hit.address || {};
+        var r = hit ? { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null } : null;
+        geoCache[job.key] = r; store(GEO_KEY, geoCache); job.res(r);
+      })
       .catch(function () { job.res(null); })
       .then(function () { setTimeout(function () { busy = false; pump(); }, 1100); });
   }
+  function countryEn(c) { return { "法国": "France", "德国": "Germany", "比利时": "Belgium", "荷兰": "Netherlands", "西班牙": "Spain", "意大利": "Italy", "英国": "United Kingdom", "中国": "China" }[c] || c; }
+  function carrierUrl(code, n) {
+    var c = String(code || "").toUpperCase();
+    if (c === "UPS") return "https://www.ups.com/track?loc=fr_FR&tracknum=" + encodeURIComponent(n);
+    if (c === "DHL") return "https://www.dhl.com/fr-fr/home/tracking.html?tracking-id=" + encodeURIComponent(n);
+    if (c === "FEDEX") return "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n);
+    return null;
+  }
+  function parseTime(s) { var m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : null; }
+  function daysBetween(a, b) { return Math.max(0, Math.round((b - a) / 86400000)); }
 
   // ---- rendering ----
   var list = $("#list");
@@ -210,15 +227,29 @@
   function renderShipment(el, n, s) {
     var st = STATUS[s.status] || [s.status || "未知", ""];
     var head = $(".card-head", el);
-    $(".chip", head).outerHTML = chip(st[0], st[1]);
+    var traces = Array.isArray(s.traces) ? s.traces : [];
+
+    // Carrier tracking link on the number itself (UPS / DHL / FedEx).
+    var link = carrierUrl(s.outer_carrier_code, n);
+    if (link) $(".num", head).outerHTML = '<a class="num mono numlink" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
+
+    // Days since the first event (usually 已下单); stops counting once delivered.
+    var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
+    var last = parseTime(traces.length ? traces[0].time : null);
+    var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
+    $(".chip", head).outerHTML = chip(st[0], st[1]) + (days != null ? chip((s.status === "delivered" ? "共运输 " : "已运输 ") + days + " 天", "") : "");
+
     var meta = [];
     if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
-    if (s.country) meta.push(s.country + (s.postcode ? " " + s.postcode : ""));
+    var destText = s.country ? s.country + (s.postcode ? " " + s.postcode : "") : "";
+    if (destText) meta.push(destText);
     if (s.parcel_count) meta.push(s.parcel_count + " 件");
-    if (s.client_reference && s.client_reference !== n) meta.push("客户号 " + s.client_reference);
-    $('[data-role="meta"]', head).textContent = meta.join(" · ");
-
-    var traces = Array.isArray(s.traces) ? s.traces : [];
+    var metaEl = $('[data-role="meta"]', head);
+    metaEl.textContent = meta.join(" · ");
+    // Fill in the town once the postcode is resolved (async, cached).
+    if (s.postcode && s.country) lookup(s.postcode + " " + countryEn(s.country)).then(function (r) {
+      if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
+    });
     var rows = traces.map(function (t, i) {
       var p = placeOf(t.info);
       return '<tr' + (i === 0 ? ' class="now"' : '') + ' data-i="' + i + '"><td class="t mono">' + esc(t.time) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
@@ -240,7 +271,7 @@
     // chronological order for the line: API returns newest first
     var ordered = traces.slice().reverse();
     var jobs = ordered.map(function (t) { var p = placeOf(t.info); return p ? geocode(p).then(function (ll) { return ll ? { ll: ll, t: t, place: p } : null; }) : Promise.resolve(null); });
-    var destQ = s.postcode && s.country ? geocode(s.postcode + " " + (s.country === "法国" ? "France" : s.country)) : Promise.resolve(null);
+    var destQ = s.postcode && s.country ? geocode(s.postcode + " " + countryEn(s.country)) : Promise.resolve(null);
 
     Promise.all(jobs.concat([destQ])).then(function (res) {
       var dest = res.pop();
