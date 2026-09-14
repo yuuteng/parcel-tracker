@@ -81,7 +81,10 @@
   td .pin.none{background:transparent;border:1px solid var(--line-strong);opacity:1}
   .map{min-height:420px;border-left:1px solid var(--line);background:var(--chip)}
   @media (max-width:900px){.map{border-left:none;border-top:1px solid var(--line);min-height:340px}}
-  .map .leaflet-container{width:100%;height:100%;min-height:inherit;font-family:inherit}
+  .map .leaflet-container{width:100%;height:100%;min-height:inherit;font-family:inherit;background:var(--bg)}
+  .map .leaflet-tile-pane{filter:saturate(.25) sepia(.25) contrast(.9) brightness(1.04)}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) grayscale(.55) brightness(.82) contrast(.92)}}
+  :root[data-theme="dark"] .map .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) grayscale(.55) brightness(.82) contrast(.92)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
   .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
   .legend i.now{background:var(--now)} .legend i.past{background:var(--accent);opacity:.7} .legend i.dest{border:2px solid var(--accent);background:transparent}
@@ -388,17 +391,18 @@
       if (note) note.textContent = pts.length ? (missing > 0 ? missing + " 个站名未能定位" : "") : "轨迹中没有可定位的地点";
       if (!pts.length) return;
       var line = pts.map(function (p) { return p.ll; });
-      L.polyline(line, { color: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2458c8", weight: 3, opacity: .85 }).addTo(map);
+      var cs = getComputedStyle(document.documentElement), blue = cs.getPropertyValue("--accent").trim() || "#2458c8", now = cs.getPropertyValue("--now").trim() || "#d9480f", ring = cs.getPropertyValue("--card").trim() || "#fff";
+      L.polyline(line, { color: blue, weight: 3, opacity: .85 }).addTo(map);
       pts.forEach(function (p, i) {
         var last = i === pts.length - 1;
-        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? "#d9480f" : "#2458c8", fillColor: last ? "#ff7a45" : "#2458c8", fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(map);
+        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? ring : blue, fillColor: last ? now : blue, fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(map);
         m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info));
         if (last) m.openPopup();
       });
       var bounds = L.latLngBounds(line);
       if (dest) {
-        L.polyline([line[line.length - 1], dest], { color: "#2458c8", weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
-        L.circleMarker(dest, { radius: 7, color: "#2458c8", fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
+        L.polyline([line[line.length - 1], dest], { color: blue, weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
+        L.circleMarker(dest, { radius: 7, color: blue, fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
           .bindPopup('<b>目的地</b><span class="mono">' + esc(destName) + '</span>');
         bounds.extend(dest);
       }
