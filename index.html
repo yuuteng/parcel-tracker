@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快递看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#f4f3ef; --card:#ffffff; --ink:#1c1e22; --mute:#6f7480; --line:#dedcd5; --line-strong:#c9c6bd;
+    --accent:#2458c8; --accent-soft:#e4ebfa; --now:#d9480f; --ok:#1f7a45; --warn:#9a6700; --bad:#b42318;
+    --chip:#eeede8; --frame-bg:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
+      --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
+      --chip:#272b33; --frame-bg:#ffffff;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
+    --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
+    --chip:#272b33; --frame-bg:#ffffff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",-apple-system,"PingFang SC","Helvetica Neue",sans-serif;padding-block:22px 64px;padding-inline:20px}
+  .wrap{max-width:1240px;margin:0 auto}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-bottom:18px}
+  header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+  header .stamp{color:var(--mute);font-size:13px}
+  .controls{display:flex;gap:8px;flex:1 1 380px;min-width:0}
+  .controls input{flex:1 1 auto;min-width:0;padding:9px 12px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Mono",ui-monospace,Menlo,monospace}
+  .controls input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  button{padding:9px 14px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Sans",sans-serif;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{opacity:.9;color:#fff}
+  button[disabled]{opacity:.5;cursor:default}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
+  .card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .num{font-size:16px;font-weight:600}
+  .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
+  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)}
+  .meta{color:var(--mute);font-size:13px}
+  .spacer{flex:1}
+  .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
+  .del:hover{color:var(--bad)}
+
+  .body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
+  @media (max-width:900px){.body{grid-template-columns:1fr}}
+  .trace{overflow:auto;max-height:560px}
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--card)}
+  td.t{white-space:nowrap;color:var(--mute);font-size:13px;width:1%}
+  tr.now td{background:var(--accent-soft)}
+  tr.now td.t{color:var(--now);font-weight:500}
+  td .pin{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;opacity:.7}
+  td .pin.none{background:transparent;border:1px solid var(--line-strong);opacity:1}
+  .map{min-height:420px;border-left:1px solid var(--line);background:var(--chip)}
+  @media (max-width:900px){.map{border-left:none;border-top:1px solid var(--line);min-height:340px}}
+  .map .leaflet-container{width:100%;height:100%;min-height:inherit;font-family:inherit}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .legend i.now{background:var(--now)} .legend i.past{background:var(--accent);opacity:.7} .legend i.dest{border:2px solid var(--accent);background:transparent}
+
+  .note{padding:14px 16px;color:var(--mute);font-size:14px}
+  .note b{color:var(--ink);font-weight:500}
+  .frame-wrap{background:var(--frame-bg)}
+  iframe{display:block;width:100%;height:640px;border:0}
+  .empty{padding:48px 0;text-align:center;color:var(--mute)}
+  .leaflet-popup-content{font:13px "IBM Plex Sans",sans-serif;margin:8px 10px}
+  .leaflet-popup-content .mono{color:var(--mute);display:block;font-size:12px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>快递看板</h1>
+    <div class="controls">
+      <input id="input" type="text" placeholder="单号,多个用空格或逗号分开,回车添加" autocomplete="off" spellcheck="false" aria-label="添加单号">
+      <button class="primary" id="add">添加</button>
+      <button id="refresh">全部刷新</button>
+    </div>
+    <div class="stamp" id="stamp"></div>
+  </header>
+  <div id="list"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var APP = "642e7f7573f04222943d090e";
+  var KEY = "parcel-tracker.numbers.v1";
+  var GEO_KEY = "parcel-tracker.geo.v1";
+  var SEED = ["1ZH870646814645817", "1ZH870646837776197", "2806407155"];
+  var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
+                 picked_up: ["已揽收", "warn"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
+
+  // Coordinates for stations the China–Europe rail leg reports, so the first
+  // paint needs no geocoding round-trips. Anything else goes to Nominatim once
+  // and is cached in localStorage.
+  var KNOWN = {
+    "深圳": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
+    "玉门东": [39.8152, 97.9201], "鄯善": [42.2914, 90.6423], "阿拉山口": [45.3632, 82.4341],
+    "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [54.7751, 69.0978],
+    "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677],
+    "布列斯特": [52.0938, 23.6852], "BREST": [52.0938, 23.6852], "MALASZEWICZE": [52.1960, 23.4310],
+    "DUISBURG": [51.4344, 6.7623], "杜伊斯堡": [51.4344, 6.7623], "HAMBURG": [53.5511, 9.9937],
+    "WARSAW": [52.2297, 21.0122], "华沙": [52.2297, 21.0122], "PARIS": [48.8566, 2.3522], "巴黎": [48.8566, 2.3522]
+  };
+
+  function $(s, r) { return (r || document).querySelector(s); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+
+  // ---- numbers: URL hash wins, then localStorage, then the seed ----
+  function fromHash() {
+    var m = location.hash.match(/[#&]n=([^&]+)/);
+    return m ? decodeURIComponent(m[1]).split(",").map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean) : null;
+  }
+  var numbers = fromHash() || read(KEY, null) || SEED.slice();
+  function persist() { store(KEY, numbers); history.replaceState(null, "", "#n=" + encodeURIComponent(numbers.join(","))); }
+  persist();
+
+  // ---- nextsls ----
+  function fetchShipment(n) {
+    var url = "https://tracking.nextsls.com/rest/trace/tracking/lists?app=" + encodeURIComponent(APP) + "&number=" + encodeURIComponent(n);
+    return fetch(url, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (j) {
+      var s = j && j.data && j.data.shipment;
+      if (!s) { var e = new Error(j && j.info ? j.info : "无记录"); e.notFound = true; throw e; }
+      return s;
+    });
+  }
+
+  // ---- place extraction from free-text events ----
+  var SKIP = /已下单|已发运|装柜|班列|label|created|派送|签收|清关|海关|customs|delivered|out for/i;
+  function placeOf(info) {
+    if (!info) return null;
+    var m = info.match(/现站[:：]\s*([^，,。]+)/);
+    if (m) return clean(m[1]);
+    m = info.match(/^(\S+?)(集散中心|仓|中心)/);
+    if (m) return clean(m[1]);
+    if (SKIP.test(info)) return null;
+    if (/^[一-龥]{2,6}$/.test(info.trim())) return info.trim();
+    m = info.match(/^([A-Za-z][A-Za-z .'-]{2,})\s*(,|$)/);
+    if (m) return clean(m[1]);
+    return null;
+  }
+  function clean(s) {
+    return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
+  }
+
+  // ---- geocoding with a serial queue, 1.1 s apart, cached ----
+  var geoCache = read(GEO_KEY, {});
+  var queue = [], busy = false;
+  function geocode(name) {
+    var key = name.toUpperCase();
+    if (KNOWN[key]) return Promise.resolve(KNOWN[key]);
+    if (KNOWN[name]) return Promise.resolve(KNOWN[name]);
+    if (geoCache[key] !== undefined) return Promise.resolve(geoCache[key]);
+    return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
+  }
+  function pump() {
+    if (busy || !queue.length) return;
+    busy = true;
+    var job = queue.shift();
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
+      .then(function (r) { return r.json(); })
+      .then(function (a) { var p = a && a[0] ? [parseFloat(a[0].lat), parseFloat(a[0].lon)] : null; geoCache[job.key] = p; store(GEO_KEY, geoCache); job.res(p); })
+      .catch(function () { job.res(null); })
+      .then(function () { setTimeout(function () { busy = false; pump(); }, 1100); });
+  }
+
+  // ---- rendering ----
+  var list = $("#list");
+  function chip(text, cls) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + '</span>'; }
+
+  function shell(n) {
+    var el = document.createElement("section");
+    el.className = "card";
+    el.innerHTML = '<div class="card-head"><span class="num mono">' + esc(n) + '</span>' + chip("查询中", "") +
+      '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
+      '<button class="del" title="删除这个单号" aria-label="删除">&times;</button></div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
+    $(".del", el).addEventListener("click", function () {
+      numbers = numbers.filter(function (x) { return x !== n; }); persist(); render();
+    });
+    return el;
+  }
+
+  function renderShipment(el, n, s) {
+    var st = STATUS[s.status] || [s.status || "未知", ""];
+    var head = $(".card-head", el);
+    $(".chip", head).outerHTML = chip(st[0], st[1]);
+    var meta = [];
+    if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
+    if (s.country) meta.push(s.country + (s.postcode ? " " + s.postcode : ""));
+    if (s.parcel_count) meta.push(s.parcel_count + " 件");
+    if (s.client_reference && s.client_reference !== n) meta.push("客户号 " + s.client_reference);
+    $('[data-role="meta"]', head).textContent = meta.join(" · ");
+
+    var traces = Array.isArray(s.traces) ? s.traces : [];
+    var rows = traces.map(function (t, i) {
+      var p = placeOf(t.info);
+      return '<tr' + (i === 0 ? ' class="now"' : '') + ' data-i="' + i + '"><td class="t mono">' + esc(t.time) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
+    }).join("");
+    var body = $('[data-role="body"]', el);
+    body.innerHTML = '<div class="body"><div class="trace"><table><thead><tr><th>时间</th><th>事件</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="2" class="note">暂无轨迹</td></tr>') + '</tbody></table></div><div class="map" id="map-' + esc(n) + '"></div></div>' +
+      '<div class="legend"><span><i class="now"></i>当前位置</span><span><i class="past"></i>途经站</span><span><i class="dest"></i>目的地</span><span data-role="geo-note"></span></div>';
+    drawMap(el, n, s, traces);
+  }
+
+  function drawMap(el, n, s, traces) {
+    var holder = $("#map-" + CSS.escape(n), el);
+    if (!holder || typeof L === "undefined") { if (holder) holder.innerHTML = '<div class="note">地图库未加载</div>'; return; }
+    var map = L.map(holder, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
+    map.setView([40, 60], 3);
+
+    // chronological order for the line: API returns newest first
+    var ordered = traces.slice().reverse();
+    var jobs = ordered.map(function (t) { var p = placeOf(t.info); return p ? geocode(p).then(function (ll) { return ll ? { ll: ll, t: t, place: p } : null; }) : Promise.resolve(null); });
+    var destQ = s.postcode && s.country ? geocode(s.postcode + " " + (s.country === "法国" ? "France" : s.country)) : Promise.resolve(null);
+
+    Promise.all(jobs.concat([destQ])).then(function (res) {
+      var dest = res.pop();
+      var pts = res.filter(Boolean);
+      // collapse consecutive duplicates (same station reported twice)
+      pts = pts.filter(function (p, i) { return i === 0 || p.ll[0] !== pts[i - 1].ll[0] || p.ll[1] !== pts[i - 1].ll[1]; });
+      var note = $('[data-role="geo-note"]', el);
+      var missing = ordered.filter(function (t) { return placeOf(t.info); }).length - pts.length;
+      if (note) note.textContent = pts.length ? (missing > 0 ? missing + " 个站名未能定位" : "") : "轨迹中没有可定位的地点";
+      if (!pts.length) return;
+      var line = pts.map(function (p) { return p.ll; });
+      L.polyline(line, { color: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2458c8", weight: 3, opacity: .85 }).addTo(map);
+      pts.forEach(function (p, i) {
+        var last = i === pts.length - 1;
+        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? "#d9480f" : "#2458c8", fillColor: last ? "#ff7a45" : "#2458c8", fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(map);
+        m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info));
+        if (last) m.openPopup();
+      });
+      var bounds = L.latLngBounds(line);
+      if (dest) {
+        L.polyline([line[line.length - 1], dest], { color: "#2458c8", weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
+        L.circleMarker(dest, { radius: 7, color: "#2458c8", fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
+          .bindPopup('<b>目的地</b><span class="mono">' + esc(s.country + " " + s.postcode) + '</span>');
+        bounds.extend(dest);
+      }
+      map.fitBounds(bounds.pad(0.18));
+    });
+  }
+
+  function renderItdida(el, n, reason) {
+    var head = $(".card-head", el);
+    $(".chip", head).outerHTML = chip("itdida", "now");
+    $('[data-role="meta"]', head).textContent = "nextsls 无记录,改从 itdida 读取";
+    $('[data-role="body"]', el).innerHTML =
+      '<div class="note">下面是 itdida 的查询页,单号已填好。点<b>查询</b>,出现滑块就滑一下,结果显示在框内。刷新页面后需要再滑一次。</div>' +
+      '<div class="frame-wrap"><iframe src="https://yen.itdida.com/query.xhtml?danHao=' + encodeURIComponent(n) + '" title="itdida ' + esc(n) + '" referrerpolicy="no-referrer" loading="lazy"></iframe></div>';
+  }
+
+  function renderError(el, n, msg) {
+    $(".chip", $(".card-head", el)).outerHTML = chip("失败", "bad");
+    $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
+  }
+
+  function render() {
+    list.innerHTML = "";
+    if (!numbers.length) { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; stamp(); return; }
+    numbers.forEach(function (n) {
+      var el = shell(n); list.appendChild(el);
+      fetchShipment(n).then(function (s) { renderShipment(el, n, s); })
+        .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
+    });
+    stamp();
+  }
+  function stamp() {
+    var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
+    $("#stamp").textContent = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + numbers.length + " 个单号";
+  }
+
+  function add() {
+    var raw = $("#input").value.trim().toUpperCase();
+    if (!raw) return;
+    raw.split(/[\s,，;；]+/).forEach(function (n) { if (n && numbers.indexOf(n) < 0) numbers.push(n); });
+    $("#input").value = ""; persist(); render();
+  }
+  $("#add").addEventListener("click", add);
+  $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
+  $("#refresh").addEventListener("click", render);
+  window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
+
+  render();
+})();
+</script>
+</body>
+</html>
