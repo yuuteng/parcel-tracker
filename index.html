@@ -49,6 +49,8 @@
   .num{font-size:16px;font-weight:600}
   .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)}
+  .chip.days{background:transparent;border:1px solid var(--accent);color:var(--accent);padding:1px 9px}
+  .chip.days b{font-weight:600;font-size:13px;margin-right:2px}
   .meta{color:var(--mute);font-size:13px}
   .spacer{flex:1}
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
@@ -107,7 +109,7 @@
   "use strict";
   var APP = "642e7f7573f04222943d090e";
   var KEY = "parcel-tracker.numbers.v1";
-  var GEO_KEY = "parcel-tracker.geo.v2";
+  var GEO_KEY = "parcel-tracker.geo.v3";
   var SEED = ["1ZH870646814645817", "1ZH870646837776197", "2806407155"];
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "warn"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
@@ -187,7 +189,7 @@
     if (busy || !queue.length) return;
     busy = true;
     var job = queue.shift();
-    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
+    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
       .then(function (a) {
         var hit = a && a[0], ad = hit && hit.address || {};
@@ -237,11 +239,11 @@
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
     var last = parseTime(traces.length ? traces[0].time : null);
     var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
-    $(".chip", head).outerHTML = chip(st[0], st[1]) + (days != null ? chip((s.status === "delivered" ? "共运输 " : "已运输 ") + days + " 天", "") : "");
+    $(".chip", head).outerHTML = chip(st[0], st[1]) + (days != null ? '<span class="chip days"><b class="mono">' + days + '</b> 天' + (s.status === "delivered" ? "送达" : "在途") + '</span>' : "");
 
     var meta = [];
     if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
-    var destText = s.country ? s.country + (s.postcode ? " " + s.postcode : "") : "";
+    var destText = s.country ? countryEn(s.country) + (s.postcode ? " " + s.postcode : "") : "";
     if (destText) meta.push(destText);
     if (s.parcel_count) meta.push(s.parcel_count + " 件");
     var metaEl = $('[data-role="meta"]', head);
@@ -294,7 +296,7 @@
       if (dest) {
         L.polyline([line[line.length - 1], dest], { color: "#2458c8", weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
         L.circleMarker(dest, { radius: 7, color: "#2458c8", fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
-          .bindPopup('<b>目的地</b><span class="mono">' + esc(s.country + " " + s.postcode) + '</span>');
+          .bindPopup('<b>目的地</b><span class="mono">' + esc(countryEn(s.country) + " " + s.postcode) + '</span>');
         bounds.extend(dest);
       }
       map.fitBounds(bounds.pad(0.18));
