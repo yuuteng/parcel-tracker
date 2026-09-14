@@ -53,6 +53,7 @@
   .meta{color:var(--mute);font-size:13px}
   .spacer{flex:1}
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
+  .tag{font-size:11.5px;color:var(--mute);border:1px solid var(--line-strong);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
   .del:hover{color:var(--bad)}
 
   .body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
@@ -107,7 +108,6 @@
   var APP = "642e7f7573f04222943d090e";
   var KEY = "parcel-tracker.numbers.v1";
   var GEO_KEY = "parcel-tracker.geo.v3";
-  var SEED = ["1ZH870646814645817", "1ZH870646837776197", "2806407155"];
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
 
@@ -129,13 +129,23 @@
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
 
-  // ---- numbers: URL hash wins, then localStorage, then the seed ----
+  // ---- shared numbers come from numbers.json in the repo; personal ones from
+  // the URL hash, then localStorage ----
+  var shared = [];
+  function loadShared() {
+    return fetch("numbers.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { shared = (j && j.shared || []).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean); })
+      .catch(function () { shared = []; });
+  }
   function fromHash() {
     var m = location.hash.match(/[#&]n=([^&]+)/);
     return m ? decodeURIComponent(m[1]).split(",").map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean) : null;
   }
-  var numbers = fromHash() || read(KEY, null) || SEED.slice();
-  function persist() { store(KEY, numbers); history.replaceState(null, "", "#n=" + encodeURIComponent(numbers.join(","))); }
+  var numbers = fromHash() || read(KEY, null) || [];
+  function persist() {
+    store(KEY, numbers);
+    history.replaceState(null, "", location.pathname + location.search + (numbers.length ? "#n=" + encodeURIComponent(numbers.join(",")) : ""));
+  }
   persist();
 
   // ---- nextsls ----
@@ -268,13 +278,15 @@
   var list = $("#list");
   function chip(text, cls) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + '</span>'; }
 
-  function shell(n) {
+  function shell(n, isShared) {
     var el = document.createElement("section");
     el.className = "card";
     el.innerHTML = '<div class="card-head"><span class="num mono">' + esc(n) + '</span>' + chip("查询中", "") +
       '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
-      '<button class="del" title="删除这个单号" aria-label="删除">&times;</button></div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
-    $(".del", el).addEventListener("click", function () {
+      (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span>'
+                : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') +
+      '</div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
+    if (!isShared) $(".del", el).addEventListener("click", function () {
       numbers = numbers.filter(function (x) { return x !== n; }); persist(); render();
     });
     return el;
@@ -382,11 +394,15 @@
     $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
   }
 
+  function allNumbers() {
+    return shared.concat(numbers.filter(function (n) { return shared.indexOf(n) < 0; }));
+  }
   function render() {
     list.innerHTML = "";
-    if (!numbers.length) { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; stamp(); return; }
-    numbers.forEach(function (n) {
-      var el = shell(n); list.appendChild(el);
+    var all = allNumbers();
+    if (!all.length) { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; stamp(); return; }
+    all.forEach(function (n) {
+      var el = shell(n, shared.indexOf(n) >= 0); list.appendChild(el);
       fetchShipment(n)
         .catch(function (e) {
           if (!e.notFound) throw e;
@@ -400,21 +416,21 @@
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
-    $("#stamp").textContent = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + numbers.length + " 个单号";
+    $("#stamp").textContent = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + shared.length + " 个共享 · " + numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length + " 个自己的";
   }
 
   function add() {
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
-    raw.split(/[\s,，;；]+/).forEach(function (n) { if (n && numbers.indexOf(n) < 0) numbers.push(n); });
+    raw.split(/[\s,，;；]+/).forEach(function (n) { if (n && numbers.indexOf(n) < 0 && shared.indexOf(n) < 0) numbers.push(n); });
     $("#input").value = ""; persist(); render();
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
-  $("#refresh").addEventListener("click", render);
+  $("#refresh").addEventListener("click", function () { loadShared().then(render); });
   window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
 
-  render();
+  loadShared().then(render);
 })();
 </script>
 </body>
