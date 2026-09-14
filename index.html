@@ -228,7 +228,7 @@
   function drawMap(el, n, s, traces) {
     var holder = $("#map-" + CSS.escape(n), el);
     if (!holder || typeof L === "undefined") { if (holder) holder.innerHTML = '<div class="note">地图库未加载</div>'; return; }
-    var map = L.map(holder, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
+    var map = L.map(holder, { zoomControl: true, attributionControl: true, scrollWheelZoom: true });
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
     map.setView([40, 60], 3);
 
