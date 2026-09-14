@@ -48,7 +48,7 @@
   .card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;border-bottom:1px solid var(--line)}
   .num{font-size:16px;font-weight:600}
   .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
-  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)}
+  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)} .chip.pick{color:var(--accent);background:var(--accent-soft)}
   .chip b{font-weight:600;font-size:13px;margin-left:5px;margin-right:1px}
   .meta{color:var(--mute);font-size:13px}
   .spacer{flex:1}
@@ -109,7 +109,7 @@
   var GEO_KEY = "parcel-tracker.geo.v3";
   var SEED = ["1ZH870646814645817", "1ZH870646837776197", "2806407155"];
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
-                 picked_up: ["已揽收", "warn"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
+                 picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
 
   // Coordinates for stations the China–Europe rail leg reports, so the first
   // paint needs no geocoding round-trips. Anything else goes to Nominatim once
@@ -183,6 +183,13 @@
         batch.forEach(function (b) { b.rej(e); });
       }).then(function () { setTimeout(function () { itBusy = false; itFlush(); }, 1200); });
   }
+  function itdidaCls(desc) {
+    var d = String(desc || "");
+    if (/签收|delivered/i.test(d)) return "ok";
+    if (/退|异常|问题|拒收|exception|return/i.test(d)) return "bad";
+    if (/收货|揽收|入库|收件/.test(d)) return "pick";
+    return "warn";
+  }
   function itdidaShipment(n, item) {
     var tracks = item && Array.isArray(item.trackList) ? item.trackList : [];
     if (!tracks.length) { var e = new Error(item && item.errorMsg || "itdida 无记录"); e.notFound = true; throw e; }
@@ -190,7 +197,7 @@
     var d = item.detail || {};
     return {
       source: "itdida", link: itdidaUrl(n),
-      status: tracks[0].desc || "有轨迹", statusCls: "warn",
+      status: tracks[0].desc || "有轨迹", statusCls: itdidaCls(tracks[0].desc),
       country: d.guoJia || "", postcode: "", parcel_count: d.numOfUnits || 0,
       outer_carrier_code: item.zhuanDanHao || "",
       traces: tracks.map(function (t) {
