@@ -58,6 +58,10 @@
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
   .tag{font-size:11.5px;color:var(--mute);border:1px solid var(--line-strong);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
   .del:hover{color:var(--bad)}
+  .grip{cursor:grab;color:var(--mute);font-size:16px;line-height:1;padding:2px 4px;user-select:none;-webkit-user-select:none;touch-action:none;letter-spacing:-2px}
+  .grip:active{cursor:grabbing}
+  .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.45);position:relative;z-index:5}
+  .stamp button{border:none;background:none;color:var(--accent);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
 
   .body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
   @media (max-width:900px){.body{grid-template-columns:1fr}}
@@ -121,6 +125,8 @@
   var APP = "642e7f7573f04222943d090e";
   var KEY = "parcel-tracker.numbers.v1";
   var GEO_KEY = "parcel-tracker.geo.v3";
+  var HIDE_KEY = "parcel-tracker.hidden.v1";
+  var ORDER_KEY = "parcel-tracker.order.v1";
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
 
@@ -155,6 +161,8 @@
     return m ? decodeURIComponent(m[1]).split(",").map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean) : null;
   }
   var numbers = fromHash() || read(KEY, null) || [];
+  var hidden = read(HIDE_KEY, []);
+  var order = read(ORDER_KEY, []);
   function persist() {
     store(KEY, numbers);
     history.replaceState(null, "", location.pathname + location.search + (numbers.length ? "#n=" + encodeURIComponent(numbers.join(",")) : ""));
@@ -294,14 +302,18 @@
   function shell(n, isShared) {
     var el = document.createElement("section");
     el.className = "card";
-    el.innerHTML = '<div class="card-head"><span class="num mono">' + esc(n) + '</span>' + chip("查询中", "") +
+    el.dataset.n = n;
+    el.innerHTML = '<div class="card-head"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num mono">' + esc(n) + '</span>' + chip("查询中", "") +
       '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
-      (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span>'
+      (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') +
       '</div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
-    if (!isShared) $(".del", el).addEventListener("click", function () {
-      numbers = numbers.filter(function (x) { return x !== n; }); persist(); render();
+    $(".del", el).addEventListener("click", function () {
+      if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
+      else { numbers = numbers.filter(function (x) { return x !== n; }); persist(); }
+      render();
     });
+    enableDrag(el);
     return el;
   }
 
@@ -432,7 +444,45 @@
   }
 
   function allNumbers() {
-    return shared.concat(numbers.filter(function (n) { return shared.indexOf(n) < 0; }));
+    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; });
+    var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0; });
+    var all = mine.concat(pub);
+    if (!order.length) return all;
+    var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
+    var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
+    // numbers added since the last drag: personal ones go on top, shared ones at the bottom
+    return fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
+  }
+  function saveOrder() {
+    order = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
+    store(ORDER_KEY, order);
+  }
+
+  // ---- drag to reorder: pointer events on the grip, works with touch ----
+  function enableDrag(el) {
+    var grip = $(".grip", el);
+    grip.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      el.classList.add("dragging");
+      function move(ev) {
+        var over = document.elementFromPoint(ev.clientX, ev.clientY);
+        var target = over && over.closest ? over.closest(".card") : null;
+        if (!target || target === el || target.parentNode !== list) return;
+        var r = target.getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) list.insertBefore(el, target); else list.insertBefore(el, target.nextSibling);
+      }
+      function up() {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+        el.classList.remove("dragging");
+        saveOrder(); stamp();
+      }
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
   }
   function render() {
     list.innerHTML = "";
@@ -453,13 +503,20 @@
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
-    $("#stamp").textContent = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + shared.length + " 个共享 · " + numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length + " 个自己的";
+    var hid = hidden.filter(function (n) { return shared.indexOf(n) >= 0; }).length;
+    $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length + " 个自己的 · " + (shared.length - hid) + " 个共享" +
+      (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "");
+    var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; store(HIDE_KEY, hidden); render(); });
   }
 
   function add() {
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
-    raw.split(/[\s,，;；]+/).forEach(function (n) { if (n && numbers.indexOf(n) < 0 && shared.indexOf(n) < 0) numbers.push(n); });
+    raw.split(/[\s,，;；]+/).forEach(function (n) {
+      if (!n) return;
+      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); store(HIDE_KEY, hidden); return; }
+      if (numbers.indexOf(n) < 0) numbers.unshift(n);
+    });
     $("#input").value = ""; persist(); render();
   }
   $("#add").addEventListener("click", add);
