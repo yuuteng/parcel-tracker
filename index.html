@@ -305,7 +305,8 @@
     var el = document.createElement("section");
     el.className = "card";
     el.dataset.n = n;
-    el.innerHTML = '<div class="card-head"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num mono">' + esc(n) + '</span>' + chip("查询中", "") +
+    el.innerHTML = '<div class="card-head"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num mono">' + esc(n) + '</span>' +
+      '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>' + chip("查询中", "") +
       '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
       (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') +
@@ -313,7 +314,12 @@
     $(".del", el).addEventListener("click", function () {
       if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
       else { numbers = numbers.filter(function (x) { return x !== n; }); persist(); }
-      render();
+      el.remove(); if (!list.querySelector(".card")) showEmpty(); stamp();
+    });
+    var copy = $('[data-role="copy"]', el);
+    copy.addEventListener("click", function () {
+      var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
     });
     enableDrag(el);
     return el;
@@ -444,17 +450,11 @@
   function renderItdida(el, n, reason) {
     var head = $(".card-head", el);
     var num = $(".num", head);
-    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>' +
-      '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>';
+    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
     $(".chip", head).outerHTML = chip("无记录", "");
     $('[data-role="meta"]', head).textContent = WORKER_URL ? "nextsls、itdida 和 17track 都没有这个单号" : "nextsls 和 itdida 都没有这个单号";
     $('[data-role="body"]', el).innerHTML =
       '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
-    var copy = $('[data-role="copy"]', el);
-    copy.addEventListener("click", function () {
-      var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
-      if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
-    });
   }
 
   function renderError(el, n, msg) {
@@ -503,27 +503,38 @@
       grip.addEventListener("pointercancel", up);
     });
   }
+  function load(el, n) {
+    fetchShipment(n)
+      .catch(function (e) {
+        if (!e.notFound) throw e;
+        $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
+        return fetchItdida(n);
+      })
+      .catch(function (e) {
+        if (!e.notFound || !WORKER_URL) throw e;
+        $('[data-role="body"] .note', el).textContent = "itdida 无记录,正在读取 17track…";
+        return fetchWorker(n);
+      })
+      .then(function (s) { renderShipment(el, n, s); })
+      .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
+  }
+  function showEmpty() { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; }
+  // Full rebuild: first paint, "全部刷新", restore hidden, hash change.
   function render() {
     list.innerHTML = "";
     var all = allNumbers();
-    if (!all.length) { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; stamp(); return; }
-    all.forEach(function (n) {
-      var el = shell(n, shared.indexOf(n) >= 0); list.appendChild(el);
-      fetchShipment(n)
-        .catch(function (e) {
-          if (!e.notFound) throw e;
-          $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
-          return fetchItdida(n);
-        })
-        .catch(function (e) {
-          if (!e.notFound || !WORKER_URL) throw e;
-          $('[data-role="body"] .note', el).textContent = "itdida 无记录,正在读取 17track…";
-          return fetchWorker(n);
-        })
-        .then(function (s) { renderShipment(el, n, s); })
-        .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
-    });
+    if (!all.length) { showEmpty(); stamp(); return; }
+    all.forEach(function (n) { var el = shell(n, shared.indexOf(n) >= 0); list.appendChild(el); load(el, n); });
     stamp();
+  }
+  // Insert one card where allNumbers() would place it, without touching the others.
+  function addCard(n) {
+    if (list.querySelector(".card[data-n=\"" + n + "\"]")) return;
+    var empty = $(".empty", list); if (empty) empty.remove();
+    var all = allNumbers(), i = all.indexOf(n), el = shell(n, shared.indexOf(n) >= 0), before = null;
+    for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
+    list.insertBefore(el, before);
+    load(el, n);
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
@@ -536,12 +547,14 @@
   function add() {
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
+    var fresh = [];
     raw.split(/[\s,，;；]+/).forEach(function (n) {
       if (!n) return;
-      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); store(HIDE_KEY, hidden); return; }
-      if (numbers.indexOf(n) < 0) numbers.unshift(n);
+      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); store(HIDE_KEY, hidden); fresh.push(n); return; }
+      if (numbers.indexOf(n) < 0) { numbers.unshift(n); fresh.push(n); }
     });
-    $("#input").value = ""; persist(); render();
+    $("#input").value = ""; persist();
+    fresh.forEach(addCard); stamp();
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
