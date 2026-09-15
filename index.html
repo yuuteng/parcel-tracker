@@ -142,7 +142,17 @@
     "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677],
     "布列斯特": [52.0938, 23.6852], "BREST": [52.0938, 23.6852], "MALASZEWICZE": [52.1960, 23.4310],
     "DUISBURG": [51.4344, 6.7623], "杜伊斯堡": [51.4344, 6.7623], "HAMBURG": [53.5511, 9.9937],
-    "WARSAW": [52.2297, 21.0122], "华沙": [52.2297, 21.0122], "PARIS": [48.8566, 2.3522], "巴黎": [48.8566, 2.3522]
+    "WARSAW": [52.2297, 21.0122], "华沙": [52.2297, 21.0122], "PARIS": [48.8566, 2.3522], "巴黎": [48.8566, 2.3522],
+    "成都": [30.5728, 104.0668], "CHENGDU": [30.5728, 104.0668], "广州": [23.1291, 113.2644], "GUANGZHOU": [23.1291, 113.2644],
+    "上海": [31.2304, 121.4737], "SHANGHAI": [31.2304, 121.4737], "义乌": [29.3068, 120.0750], "YIWU": [29.3068, 120.0750],
+    "西安": [34.3416, 108.9398], "郑州": [34.7466, 113.6254], "武汉": [30.5928, 114.3055], "北京": [39.9042, 116.4074],
+    "杭州": [30.2741, 120.1551], "东莞": [23.0207, 113.7518], "苏州": [31.2989, 120.5853], "宁波": [29.8683, 121.5440],
+    "昆明": [25.0389, 102.7183], "乌鲁木齐": [43.8256, 87.6168], "霍尔果斯": [44.2136, 80.4115], "二连浩特": [43.6531, 111.9769],
+    "满洲里": [49.5978, 117.3787], "香港": [22.3193, 114.1694], "HONG KONG": [22.3193, 114.1694], "SHENZHEN": [22.5446, 114.0546],
+    "CHONGQING": [29.5630, 106.5516], "莫斯科": [55.7558, 37.6173], "MOSCOW": [55.7558, 37.6173], "明斯克": [53.9006, 27.5590], "MINSK": [53.9006, 27.5590],
+    "ROISSY": [49.0097, 2.5479], "CHILLY-MAZARIN": [48.7020, 2.3122], "SURESNES": [48.8712, 2.2290], "LYON": [45.7640, 4.8357],
+    "MARSEILLE": [43.2965, 5.3698], "FRANKFURT": [50.1109, 8.6821], "LIEGE": [50.6326, 5.5797], "LIÈGE": [50.6326, 5.5797],
+    "AMSTERDAM": [52.3676, 4.9041], "LONDON": [51.5074, -0.1278]
   };
 
   function $(s, r) { return (r || document).querySelector(s); }
@@ -254,7 +264,15 @@
     if (m) return clean(m[1]);
     return null;
   }
-  function placeOfTrace(t) { return t.place || placeOf(t.info); }
+  // Strip trailing postal codes ("成都市 61002500" → "成都市") and drop
+  // country-code-only locations ("CN"), so lookups hit KNOWN / cache more often.
+  function normPlace(p) {
+    if (!p) return null;
+    p = String(p).trim().replace(/[\s,，]*\d{5,}\s*$/, "").replace(/[\s,，]+$/, "").trim();
+    if (!p || /^[A-Z]{2,3}$/.test(p)) return null;
+    return p;
+  }
+  function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
   function clean(s) {
     return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
   }
@@ -266,7 +284,7 @@
   // stations come from KNOWN without a network call.
   function lookup(name) {
     var key = name.toUpperCase();
-    var k = KNOWN[key] || KNOWN[name];
+    var k = KNOWN[key] || KNOWN[name] || KNOWN[name.replace(/(市|县|区)$/, "")];
     if (k) return Promise.resolve({ ll: k, town: null });
     if (geoCache[key] !== undefined) return Promise.resolve(geoCache[key]);
     return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
@@ -393,39 +411,51 @@
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
     map.setView([40, 60], 3);
 
-    // chronological order for the line: API returns newest first
+    // chronological order for the line: API returns newest first.
+    // Points are drawn as soon as each one resolves: KNOWN stations appear
+    // at once, geocoded ones fill in while the Nominatim queue drains.
     var ordered = traces.slice().reverse();
-    var jobs = ordered.map(function (t) { var p = placeOfTrace(t); return p ? geocode(p).then(function (ll) { return ll ? { ll: ll, t: t, place: p } : null; }) : Promise.resolve(null); });
-    var destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
-    var destQ = destName ? geocode(destName) : Promise.resolve(null);
+    var blue = "#2458c8", now = "#d9480f", ring = "#fff";
+    var layer = L.layerGroup().addTo(map), pts = [], dest = null, pending = 0, raf = 0, fitted = false;
+    var note = $('[data-role="geo-note"]', el);
+    var total = ordered.filter(function (t) { return placeOfTrace(t); }).length;
 
-    Promise.all(jobs.concat([destQ])).then(function (res) {
-      var dest = res.pop();
-      var pts = res.filter(Boolean);
-      // collapse consecutive duplicates (same station reported twice)
-      pts = pts.filter(function (p, i) { return i === 0 || p.ll[0] !== pts[i - 1].ll[0] || p.ll[1] !== pts[i - 1].ll[1]; });
-      var note = $('[data-role="geo-note"]', el);
-      var missing = ordered.filter(function (t) { return placeOfTrace(t); }).length - pts.length;
-      if (note) note.textContent = pts.length ? (missing > 0 ? missing + " 个站名未能定位" : "") : "轨迹中没有可定位的地点";
-      if (!pts.length) return;
-      var line = pts.map(function (p) { return p.ll; });
-      var blue = "#2458c8", now = "#d9480f", ring = "#fff";
-      L.polyline(line, { color: blue, weight: 3, opacity: .85 }).addTo(map);
-      pts.forEach(function (p, i) {
-        var last = i === pts.length - 1;
-        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? ring : blue, fillColor: last ? now : blue, fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(map);
-        m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info));
-        if (last) m.openPopup();
+    function redraw() {
+      raf = 0; layer.clearLayers();
+      var sorted = pts.slice().sort(function (a, b) { return a.i - b.i; });
+      // collapse consecutive duplicates, keeping the latest event at that place
+      sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
+      if (note) note.textContent = pending ? "定位中…" : (sorted.length ? (total - pts.length > 0 ? (total - pts.length) + " 个站名未能定位" : "") : (total ? "站名未能定位" : "轨迹中没有可定位的地点"));
+      if (!sorted.length && !dest) return;
+      var line = sorted.map(function (p) { return p.ll; }), bounds = L.latLngBounds(line.length ? line : [dest]);
+      if (line.length > 1) L.polyline(line, { color: blue, weight: 3, opacity: .85 }).addTo(layer);
+      sorted.forEach(function (p, i) {
+        var last = i === sorted.length - 1;
+        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? ring : blue, fillColor: last ? now : blue, fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(layer);
+        m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
+        if (last && !pending) m.openPopup();
       });
-      var bounds = L.latLngBounds(line);
       if (dest) {
-        L.polyline([line[line.length - 1], dest], { color: blue, weight: 2, dashArray: "6 8", opacity: .6 }).addTo(map);
-        L.circleMarker(dest, { radius: 7, color: blue, fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(map)
+        if (line.length) L.polyline([line[line.length - 1], dest], { color: blue, weight: 2, dashArray: "6 8", opacity: .6 }).addTo(layer);
+        L.circleMarker(dest, { radius: 7, color: blue, fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(layer)
           .bindPopup('<b>目的地</b><span class="mono">' + esc(destName) + '</span>');
         bounds.extend(dest);
       }
-      map.fitBounds(bounds.pad(0.18), { maxZoom: 7 });
+      // fit when the picture has some extent, and once more when the last lookup lands;
+      // a single point while others are pending stays at the world view
+      var hasArea = bounds.getNorth() !== bounds.getSouth() || bounds.getEast() !== bounds.getWest();
+      if (!pending || (!fitted && hasArea)) { map.fitBounds(bounds.pad(0.18), { maxZoom: 7 }); fitted = true; }
+    }
+    function schedule() { if (!raf) raf = requestAnimationFrame(redraw); }
+
+    ordered.forEach(function (t, i) {
+      var p = placeOfTrace(t); if (!p) return;
+      pending++;
+      geocode(p).then(function (ll) { if (ll) pts.push({ i: i, ll: ll, t: t, place: p }); }).catch(function () {}).then(function () { pending--; schedule(); });
     });
+    var destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
+    if (destName) { pending++; geocode(destName).then(function (ll) { dest = ll; }).catch(function () {}).then(function () { pending--; schedule(); }); }
+    if (!pending) schedule();
   }
 
   function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
