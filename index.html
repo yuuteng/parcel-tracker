@@ -123,6 +123,8 @@
 (function () {
   "use strict";
   var APP = "642e7f7573f04222943d090e";
+  // Cloudflare Worker relaying 17TRACK (see worker/README.md). Empty = third source disabled.
+  var WORKER_URL = "https://parcel-17track.yuuteng.workers.dev";
   var KEY = "parcel-tracker.numbers.v1";
   var GEO_KEY = "parcel-tracker.geo.v3";
   var HIDE_KEY = "parcel-tracker.hidden.v1";
@@ -320,7 +322,7 @@
   var TOUCH = window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
 
   function renderShipment(el, n, s) {
-    var st = s.source === "itdida" ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
+    var st = (s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
     var head = $(".card-head", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
 
@@ -422,13 +424,30 @@
 
   function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
 
+  // ---- 17TRACK via the Worker: anything the two forwarders do not know ----
+  function fetchWorker(n) {
+    if (!WORKER_URL) { var e0 = new Error("nextsls 和 itdida 都没有这个单号"); e0.notFound = true; return Promise.reject(e0); }
+    return fetch(WORKER_URL.replace(/\/$/, "") + "/?no=" + encodeURIComponent(n), { cache: "no-store" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        var j = x.j || {};
+        if (!x.ok || j.error) throw new Error("17track:" + (j.error || "HTTP error"));
+        if (!j.traces || !j.traces.length) { var e = new Error("17track 也没有这个单号的轨迹"); e.notFound = true; throw e; }
+        return {
+          source: "17track", link: j.link, status: j.status, statusCls: j.statusCls,
+          country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",
+          traces: j.traces.map(function (t) { return { time: t.time, info: t.info, place: t.place || null }; })
+        };
+      });
+  }
+
   function renderItdida(el, n, reason) {
     var head = $(".card-head", el);
     var num = $(".num", head);
     num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>';
     $(".chip", head).outerHTML = chip("无记录", "");
-    $('[data-role="meta"]', head).textContent = "nextsls 和 itdida 都没有这个单号";
+    $('[data-role="meta"]', head).textContent = WORKER_URL ? "nextsls、itdida 和 17track 都没有这个单号" : "nextsls 和 itdida 都没有这个单号";
     $('[data-role="body"]', el).innerHTML =
       '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
     var copy = $('[data-role="copy"]', el);
@@ -495,6 +514,11 @@
           if (!e.notFound) throw e;
           $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
           return fetchItdida(n);
+        })
+        .catch(function (e) {
+          if (!e.notFound || !WORKER_URL) throw e;
+          $('[data-role="body"] .note', el).textContent = "itdida 无记录,正在读取 17track…";
+          return fetchWorker(n);
         })
         .then(function (s) { renderShipment(el, n, s); })
         .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
