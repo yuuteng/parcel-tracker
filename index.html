@@ -432,7 +432,7 @@
       .then(function (x) {
         var j = x.j || {};
         if (!x.ok || j.error) throw new Error("17track:" + (j.error || "HTTP error"));
-        if (!j.traces || !j.traces.length) { var e = new Error("17track 也没有这个单号的轨迹"); e.notFound = true; throw e; }
+        if (!j.traces || !j.traces.length) { var e = new Error(j.registered ? "17track 刚登记这个单号,一两分钟后点\"全部刷新\"" : "17track 也没有这个单号的轨迹"); e.notFound = true; throw e; }
         return {
           source: "17track", link: j.link, status: j.status, statusCls: j.statusCls,
           country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Upload worker.js to Cloudflare via the REST API (no wrangler needed).
-# Usage: source ~/.config/parcel-tracker/cloudflare.env; worker/deploy.sh [--sign SIGN] [--origins ORIGINS]
+# Usage: source ~/.config/parcel-tracker/cloudflare.env; worker/deploy.sh [--token KEY] [--origins ORIGINS]
 set -euo pipefail
 NAME=parcel-17track
 DIR=$(cd "$(dirname "$0")" && pwd)
@@ -8,15 +8,15 @@ DIR=$(cd "$(dirname "$0")" && pwd)
 API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
 AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
 
-SIGN=""; ORIGINS=""
-while [ $# -gt 0 ]; do case "$1" in --sign) SIGN=$2; shift 2;; --origins) ORIGINS=$2; shift 2;; *) echo "unknown arg $1"; exit 1;; esac; done
+TOKEN=""; ORIGINS=""
+while [ $# -gt 0 ]; do case "$1" in --token) TOKEN=$2; shift 2;; --origins) ORIGINS=$2; shift 2;; *) echo "unknown arg $1"; exit 1;; esac; done
 
 # Bindings: keep whatever is already set unless overridden on the command line.
-BINDINGS=$(python3 - "$SIGN" "$ORIGINS" <<'PY'
+BINDINGS=$(python3 - "$TOKEN" "$ORIGINS" <<'PY'
 import json,sys
-sign,origins=sys.argv[1],sys.argv[2]
+token,origins=sys.argv[1],sys.argv[2]
 b=[]
-if sign: b.append({"type":"secret_text","name":"TRACK17_SIGN","text":sign})
+if token: b.append({"type":"secret_text","name":"TRACK17_TOKEN","text":token})
 if origins: b.append({"type":"plain_text","name":"ALLOWED_ORIGINS","text":origins})
 print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":b,"keep_bindings":["secret_text","plain_text"]}))
 PY

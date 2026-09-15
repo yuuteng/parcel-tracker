@@ -1,19 +1,21 @@
-// Cloudflare Worker: relays a tracking-number lookup to the 17TRACK web
-// endpoint and returns compact JSON for the parcel-tracker page.
+// Cloudflare Worker: looks a tracking number up on 17TRACK and returns a
+// compact JSON the parcel-tracker page can render. The 17TRACK token stays
+// here as a secret; the page only ever talks to this Worker.
 //
-// Vars (Workers → Settings → Variables):
-//   TRACK17_SIGN     the "sign" field the 17TRACK web app sends (copy from a browser request)
+// Secrets / vars (Workers → Settings → Variables):
+//   TRACK17_TOKEN    17TRACK API key (Settings → API in the 17TRACK dashboard)
 //   ALLOWED_ORIGINS  comma-separated page origins, default https://yuuteng.github.io
 //
 // GET /?no=CY034468628CN
+// Error codes: -18019902 = number not registered, -18019901 = already registered.
 
-const UPSTREAM = "https://t.17track.net/track/restapi";
+const API = "https://api.17track.net/track/v2.2/";
 const STATUS = {
   NotFound: ["未查到", ""], InfoReceived: ["已收单", "pick"], InTransit: ["运输中", "warn"],
   Expired: ["已过期", "bad"], AvailableForPickup: ["待取件", "warn"], OutForDelivery: ["派送中", "warn"],
   DeliveryFailure: ["派送失败", "bad"], Delivered: ["已签收", "ok"], Exception: ["异常", "bad"]
 };
-const COUNTRY = { FR: "法国", CN: "中国", DE: "德国", BE: "比利时", NL: "荷兰", ES: "西班牙", IT: "意大利", GB: "英国", US: "美国", JP: "日本", PL: "波兰", BY: "白俄罗斯", KZ: "哈萨克斯坦" };
+const COUNTRY = { FR: "法国", CN: "中国", DE: "德国", BE: "比利时", NL: "荷兰", ES: "西班牙", IT: "意大利", GB: "英国", US: "美国", JP: "日本" };
 
 export default {
   async fetch(req, env) {
@@ -27,7 +29,7 @@ export default {
     };
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (origin && !allowed.includes(origin)) return json({ error: "origin not allowed" }, 403, cors);
-    if (!env.TRACK17_SIGN) return json({ error: "TRACK17_SIGN not set" }, 500, cors);
+    if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
 
     const url = new URL(req.url);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
@@ -38,56 +40,66 @@ export default {
     const hit = await cache.match(cacheKey);
     if (hit) { const r = new Response(hit.body, hit); Object.entries(cors).forEach(([k, v]) => r.headers.set(k, v)); r.headers.set("X-Cache", "HIT"); return r; }
 
-    const up = await fetch(UPSTREAM, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json", "Accept": "*/*",
-        "Origin": "https://t.17track.net", "Referer": "https://t.17track.net/zh-cn",
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
-      },
-      body: JSON.stringify({ data: [{ num: no, fc: 0, sc: 0 }], guid: "", timeZoneOffset: -120, sign: env.TRACK17_SIGN })
-    });
-    const j = await up.json().catch(() => null);
-    if (!j) return json({ error: "17track: bad response (HTTP " + up.status + ")" }, 502, cors);
-    const sh = (j.shipments || [])[0];
-    if (!sh || !sh.shipment) {
-      const code = (j.meta && j.meta.code) || (sh && sh.code) || 0;
-      const hint = code === -14 ? " (sign 已失效)" : code === -10 ? " (Referer 被拒)" : "";
-      return json({ error: "17track: code " + code + hint, code: code, raw: url.searchParams.has("debug") ? j : undefined }, 502, cors);
+    let registered = false;
+    let info = await call17(env, "gettrackinfo", no);
+    if (info.rejected && info.rejected.code === -18019902) {          // not registered yet: register (costs 1 quota), then read again
+      const reg = await call17(env, "register", no);
+      if (reg.rejected && reg.rejected.code !== -18019901) return json({ error: reg.rejected.message || "register failed", code: reg.rejected.code }, 502, cors);
+      registered = true;
+      await new Promise(r => setTimeout(r, 2500));
+      info = await call17(env, "gettrackinfo", no);
     }
+    if (info.rejected) return json({ error: info.rejected.message || "17track error", code: info.rejected.code }, 502, cors);
 
-    const out = normalize(no, sh);
+    const out = normalize(no, info.accepted);
+    out.registered = registered;
     const res = json(out, 200, { ...cors, "Cache-Control": "public, max-age=300" });
     if (out.traces.length) await cache.put(cacheKey, res.clone());
     return res;
   }
 };
 
-function normalize(no, sh) {
-  const s = sh.shipment;
-  const providers = (s.tracking && s.tracking.providers) || [];
-  const traces = [];
+async function call17(env, method, no) {
+  const r = await fetch(API + method, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "17token": env.TRACK17_TOKEN },
+    body: JSON.stringify([{ number: no }])
+  });
+  const j = await r.json().catch(() => ({}));
+  if (j.code !== 0) return { rejected: { code: j.code, message: j.message || ("HTTP " + r.status) } };
+  const acc = (j.data && j.data.accepted || [])[0];
+  const rej = (j.data && j.data.rejected || [])[0];
+  if (acc) return { accepted: acc };
+  return { rejected: (rej && rej.error) || { code: -1, message: "empty response" } };
+}
+
+function normalize(no, acc) {
+  const ti = acc.track_info || {};
+  const providers = (ti.tracking && ti.tracking.providers) || [];
+  const events = [];
   for (const p of providers) for (const e of (p.events || [])) {
     const a = e.address || {};
-    traces.push({
+    events.push({
       time: (e.time_iso || e.time_utc || "").replace("T", " ").slice(0, 19),
       info: e.description || "",
       place: e.location || [a.city, a.state, a.country].filter(Boolean).join(", ") || null,
-      provider: (p.provider && p.provider.name) || null
+      stage: e.stage || null
     });
   }
-  traces.sort((x, y) => y.time.localeCompare(x.time));
-  const st = (s.latest_status && s.latest_status.status) || "NotFound";
-  const ship = s.shipping_info || {};
+  events.sort((x, y) => y.time.localeCompare(x.time));
+  const st = (ti.latest_status && ti.latest_status.status) || "NotFound";
+  const ship = ti.shipping_info || {};
   const to = (ship.recipient_address || {}).country || "";
   const from = (ship.shipper_address || {}).country || "";
-  const names = providers.map(p => p.provider && p.provider.name).filter(Boolean);
+  const prov = providers[0] && providers[0].provider || {};
+  const eta = ti.time_metrics && ti.time_metrics.estimated_delivery_date || null;
   return {
-    no, source: "17track",
-    carrier: names.join(" → "), carriers: names,
+    no, source: "17track", carrier: prov.name || String(acc.carrier || ""), carrierCountry: prov.country || from,
     status: (STATUS[st] || [st, ""])[0], statusCls: (STATUS[st] || [st, ""])[1], statusRaw: st,
     country: COUNTRY[to] || to, origin: COUNTRY[from] || from,
-    traces,
+    eta: eta && (eta.from || eta.to) ? { from: eta.from, to: eta.to } : null,
+    days: ti.time_metrics ? ti.time_metrics.days_of_transit : null,
+    traces: events,
     link: "https://t.17track.net/zh-cn#nums=" + no
   };
 }
