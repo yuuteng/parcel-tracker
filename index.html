@@ -139,7 +139,7 @@
     "深圳": [22.5446, 114.0546], "深圳总部": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
     "玉门东": [39.8152, 97.9201], "鄯善": [42.2914, 90.6423], "阿拉山口": [45.3632, 82.4341],
     "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [54.7751, 69.0978],
-    "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677],
+    "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677], "KUSHMURUN": [52.4518, 64.6152],
     "布列斯特": [52.0938, 23.6852], "BREST": [52.0938, 23.6852], "MALASZEWICZE": [52.1960, 23.4310],
     "DUISBURG": [51.4344, 6.7623], "杜伊斯堡": [51.4344, 6.7623], "HAMBURG": [53.5511, 9.9937],
     "WARSAW": [52.2297, 21.0122], "华沙": [52.2297, 21.0122], "PARIS": [48.8566, 2.3522], "巴黎": [48.8566, 2.3522],
@@ -280,13 +280,16 @@
   // ---- geocoding with a serial queue, 1.1 s apart, cached ----
   var geoCache = read(GEO_KEY, {});
   var queue = [], busy = false;
+  var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
   // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
   // stations come from KNOWN without a network call.
   function lookup(name) {
     var key = name.toUpperCase();
     var k = KNOWN[key] || KNOWN[name] || KNOWN[name.replace(/(市|县|区)$/, "")];
     if (k) return Promise.resolve({ ll: k, town: null });
-    if (geoCache[key] !== undefined) return Promise.resolve(geoCache[key]);
+    var c = geoCache[key];
+    if (c && c.ll) return Promise.resolve(c);
+    if (c && c.miss && Date.now() - c.miss < MISS_TTL) return Promise.resolve(null);
     return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
   }
   function geocode(name) { return lookup(name).then(function (r) { return r ? r.ll : null; }); }
@@ -294,15 +297,38 @@
     if (busy || !queue.length) return;
     busy = true;
     var job = queue.shift();
-    fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=" + encodeURIComponent(job.name), { cache: "force-cache" })
+    nominatim(job.name)
+      .then(function (r) { return r || wikipedia(job.name); })
+      .catch(function () { return null; })
+      .then(function (r) {
+        geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); job.res(r);
+        setTimeout(function () { busy = false; pump(); }, 1100);
+      });
+  }
+  function nominatim(name) {
+    return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=" + encodeURIComponent(name), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
       .then(function (a) {
         var hit = a && a[0], ad = hit && hit.address || {};
-        var r = hit ? { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null } : null;
-        geoCache[job.key] = r; store(GEO_KEY, geoCache); job.res(r);
-      })
-      .catch(function () { job.res(null); })
-      .then(function () { setTimeout(function () { busy = false; pump(); }, 1100); });
+        return hit ? { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null } : null;
+      });
+  }
+  // Wikipedia resolves spellings OSM only has under the local name
+  // (Kushmurun → Qusmuryn): exact title following redirects, then full-text
+  // search; first article carrying coordinates wins.
+  function wikipedia(name) {
+    var base = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=coordinates&";
+    function pick(d) {
+      var pages = d && d.query && d.query.pages || {};
+      var hit = Object.keys(pages).map(function (k) { return pages[k]; })
+        .sort(function (a, b) { return (a.index || 0) - (b.index || 0); })
+        .filter(function (p) { return p.coordinates && p.coordinates.length; })[0];
+      return hit ? { ll: [hit.coordinates[0].lat, hit.coordinates[0].lon], town: null } : null;
+    }
+    function get(q) { return fetch(base + q, { cache: "force-cache" }).then(function (r) { return r.json(); }).then(pick); }
+    return get("redirects=1&titles=" + encodeURIComponent(name)).then(function (r) {
+      return r || get("generator=search&gsrlimit=3&gsrsearch=" + encodeURIComponent(name));
+    });
   }
   function countryEn(c) { return { "法国": "France", "德国": "Germany", "比利时": "Belgium", "荷兰": "Netherlands", "西班牙": "Spain", "意大利": "Italy", "英国": "United Kingdom", "中国": "China" }[c] || c; }
   function carrierUrl(code, n) {
