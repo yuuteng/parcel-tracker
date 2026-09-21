@@ -8,114 +8,121 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
   :root{
-    --bg:#f4f3ef; --card:#ffffff; --ink:#1c1e22; --mute:#6f7480; --line:#dedcd5; --line-strong:#c9c6bd;
-    --accent:#2458c8; --accent-soft:#e4ebfa; --now:#d9480f; --ok:#1f7a45; --warn:#9a6700; --bad:#b42318;
-    --chip:#eeede8; --frame-bg:#ffffff;
+    --bg:#0b1220; --panel:#111a2c; --panel-2:#172238; --ink:#e6ecf5; --ink-2:#a7b4c8; --mute:#66758f; --line:#1f2b42; --line-2:#2c3a57;
+    --acc:#f5a524; --acc-soft:rgba(245,165,36,.12); --here:#ff6b3d; --ok:#3ecf8e; --warn:#f5a524; --pick:#5aa9ff; --bad:#ff5c5c;
+    --tile-filter:invert(1) hue-rotate(190deg) brightness(.72) saturate(.35) contrast(1.05);
+    --sans:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+    color-scheme:dark;
   }
-  @media (prefers-color-scheme: dark){
-    :root:not([data-theme="light"]){
-      --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
-      --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
-      --chip:#272b33; --frame-bg:#ffffff;
+  @media (prefers-color-scheme:light){
+    :root:not([data-theme="dark"]){
+      --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
+      --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
+      --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
     }
   }
-  :root[data-theme="dark"]{
-    --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
-    --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
-    --chip:#272b33; --frame-bg:#ffffff;
+  :root[data-theme="light"]{
+    --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
+    --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
+    --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
   }
   *{box-sizing:border-box}
   html,body{margin:0}
-  body{background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",-apple-system,"PingFang SC","Helvetica Neue",sans-serif;padding-block:22px 64px;padding-inline:20px}
-  .wrap{max-width:1240px;margin:0 auto}
-  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+  body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;padding-inline:16px;padding-block:16px 48px}
+  @media (min-width:980px){body{padding-inline:24px;padding-block:24px 48px}}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
-  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-bottom:18px}
-  header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
-  header .stamp{color:var(--mute);font-size:13px}
-  .controls{display:flex;gap:8px;flex:1 1 380px;min-width:0}
-  .controls input{flex:1 1 auto;min-width:0;padding:9px 12px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Mono",ui-monospace,Menlo,monospace}
-  .controls input:focus{outline:2px solid var(--accent);outline-offset:-1px}
-  button{padding:9px 14px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Sans",sans-serif;cursor:pointer}
-  button:hover{border-color:var(--accent);color:var(--accent)}
-  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-  button.primary:hover{opacity:.9;color:#fff}
+  .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+  .top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em}
+  .top .stamp{font:12px var(--mono);color:var(--mute)}
+  .stamp button{border:none;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
+  .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
+  .controls input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--mono)}
+  button{padding:9px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:500 13px var(--sans);cursor:pointer}
+  button:hover{border-color:var(--acc)}
+  button.pri{background:var(--acc);border-color:var(--acc);color:#111}
   button[disabled]{opacity:.5;cursor:default}
+  button:focus-visible,input:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
-  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
-  .card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;border-bottom:1px solid var(--line)}
-  .num{font-size:16px;font-weight:600}
-  .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
-  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)} .chip.pick{color:var(--accent);background:var(--accent-soft)}
-  .chip b{font-weight:600;font-size:13px;margin-left:5px;margin-right:1px}
-  .meta{color:var(--mute);font-size:13px}
-  .spacer{flex:1}
-  .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
-  .tag{font-size:11.5px;color:var(--mute);border:1px solid var(--line-strong);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
-  .del:hover{color:var(--bad)}
-  .grip{cursor:grab;color:var(--mute);font-size:16px;line-height:1;padding:2px 4px;user-select:none;-webkit-user-select:none;touch-action:none;letter-spacing:-2px}
+  .layout{display:grid;grid-template-columns:1fr;gap:16px}
+  @media (min-width:980px){.layout{grid-template-columns:minmax(0,11fr) minmax(400px,9fr);align-items:start}}
+  .mapwrap{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel-2);height:46vh;min-height:300px}
+  @media (min-width:980px){.mapwrap{position:sticky;top:24px;height:calc(100vh - 48px)}}
+  #map{position:absolute;inset:0;background:var(--panel-2)}
+  .leaflet-container{font-family:var(--sans)}
+  .leaflet-tile-pane{filter:var(--tile-filter)}
+  .leaflet-bar{border:1px solid var(--line-2)!important;box-shadow:none!important;border-radius:6px;overflow:hidden}
+  .leaflet-bar a{background:var(--panel)!important;color:var(--ink)!important;border-bottom-color:var(--line)!important}
+  .leaflet-bar a.maplock{width:auto;padding:0 9px;font:12px var(--sans);white-space:nowrap}
+  .leaflet-bar a.maplock.on{color:var(--acc)!important}
+  .leaflet-control-attribution{background:color-mix(in srgb,var(--panel) 80%,transparent)!important;color:var(--mute)!important;font:10px var(--sans)}
+  .leaflet-control-attribution a{color:var(--ink-2)!important}
+  .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--ink);box-shadow:0 8px 24px -12px rgba(0,0,0,.6)}
+  .leaflet-popup-content{font:13px var(--sans);margin:8px 10px}.leaflet-popup-content b{display:block}.leaflet-popup-content .mono{display:block;font:11.5px var(--mono);color:var(--mute)}
+  .leaflet-tooltip{background:var(--panel);color:var(--ink);border:1px solid var(--line-2);font:11.5px var(--mono);box-shadow:none}
+  .legend{position:absolute;left:12px;bottom:12px;z-index:500;display:flex;gap:12px;flex-wrap:wrap;padding:6px 10px;background:color-mix(in srgb,var(--panel) 85%,transparent);border:1px solid var(--line);border-radius:6px;font:11.5px var(--mono);color:var(--ink-2)}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .legend i.here{background:var(--here)} .legend i.past{background:var(--acc)} .legend i.dest{border:2px solid var(--acc);width:6px;height:6px}
+  .legend .geo{color:var(--mute)}
+
+  .cards{display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;transition:border-color .15s}
+  .card.sel{border-color:var(--acc)}
+  .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.6);position:relative;z-index:5}
+  .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:11px 14px;cursor:pointer}
+  .grip{cursor:grab;color:var(--mute);font-size:16px;line-height:1;padding:2px 2px;user-select:none;-webkit-user-select:none;touch-action:none;letter-spacing:-2px}
   .grip:active{cursor:grabbing}
-  .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.45);position:relative;z-index:5}
-  .stamp button{border:none;background:none;color:var(--accent);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
-
-  .body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
-  @media (max-width:900px){.body{grid-template-columns:1fr}}
-  .trace{overflow:auto;max-height:560px}
-  .trace .more{display:none}
-  @media (max-width:900px){
-    .trace{overflow:visible;max-height:none}
-    th{position:static}
-    .trace.collapsed tbody tr:nth-child(n+7){display:none}
-    .trace .more{display:block;width:100%;border:none;border-bottom:1px solid var(--line);border-radius:0;background:var(--chip);color:var(--accent);font-size:13px;padding:10px 14px}
-  }
-  .leaflet-bar a.maplock{width:auto;padding:0 9px;font:12px "IBM Plex Sans",sans-serif;white-space:nowrap}
-  .leaflet-bar a.maplock.on{color:var(--accent)}
-  table{border-collapse:collapse;width:100%}
-  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);vertical-align:top}
-  th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--card)}
-  td.t{white-space:nowrap;color:var(--mute);font-size:13px;width:1%}
-  tr.now td{background:var(--accent-soft)}
-  tr.now td.t{color:var(--now);font-weight:500}
-  td .pin{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;opacity:.7}
-  td .pin.none{background:transparent;border:1px solid var(--line-strong);opacity:1}
-  .map{min-height:420px;border-left:1px solid var(--line);background:var(--chip)}
-  @media (max-width:900px){.map{border-left:none;border-top:1px solid var(--line);min-height:340px}}
-  .map .leaflet-container{width:100%;height:100%;min-height:inherit;font-family:inherit;background:#f4f3ef}
-  .map .leaflet-tile-pane{filter:saturate(.25) sepia(.25) contrast(.9) brightness(1.04)}
-  .legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
-  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
-  .legend i.now{background:var(--now)} .legend i.past{background:var(--accent);opacity:.7} .legend i.dest{border:2px solid var(--accent);background:transparent}
-
-  .note{padding:14px 16px;color:var(--mute);font-size:14px}
+  .num{font:600 15px var(--mono);letter-spacing:.01em;color:var(--ink)}
+  a.num{color:var(--acc);text-decoration:none;border-bottom:1px dashed var(--acc)}
+  a.num:hover{border-bottom-style:solid}
+  button.copy{padding:2px 9px;font-size:11.5px;border-radius:999px;color:var(--mute);margin-left:-4px;background:transparent}
+  button.copy:hover{color:var(--acc)}
+  .chip{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--acc-soft);color:var(--ink-2);white-space:nowrap}
+  .chip b{font-weight:600;margin-left:5px;margin-right:1px;font-family:var(--mono)}
+  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.pick{color:var(--pick)}
+  .meta{font:12.5px var(--mono);color:var(--mute);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .spacer{flex:1}
+  .tag{font-size:11px;color:var(--mute);border:1px solid var(--line-2);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
+  .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:0 4px}
+  .del:hover{color:var(--bad);border-color:transparent}
+  .now{display:flex;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);background:var(--panel-2)}
+  .now .txt{font-size:13px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .now .txt b{color:var(--ink);font-weight:600}
+  .now .txt .t{font-family:var(--mono);color:var(--mute);font-size:12px}
+  .now .km{margin-left:auto;font:12px var(--mono);color:var(--acc);white-space:nowrap}
+  .note{padding:12px 14px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
   .note b{color:var(--ink);font-weight:500}
-  a.numlink{color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent)}
-  a.numlink:hover{border-bottom-style:solid}
-  a.numlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  button.copy{padding:2px 9px;font-size:12px;border-radius:999px;color:var(--mute);margin-left:-4px}
-  button.copy:hover{color:var(--accent)}
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:7px 14px;border-top:1px solid var(--line);vertical-align:top;font-size:13px}
+  th{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600}
+  td.t{white-space:nowrap;font:12px var(--mono);color:var(--mute);width:1%}
+  tr.cur td{color:var(--ink)} tr.cur td.t{color:var(--here);font-weight:600}
+  td .pin{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:8px;vertical-align:middle}
+  td .pin.none{background:transparent;border:1px solid var(--line-2)}
+  .trace.collapsed tbody tr:nth-child(n+7){display:none}
+  .more{display:block;width:100%;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--panel-2);color:var(--acc);font:500 12.5px var(--sans);padding:9px;cursor:pointer}
   .empty{padding:48px 0;text-align:center;color:var(--mute)}
-  .leaflet-popup-content{font:13px "IBM Plex Sans",sans-serif;margin:8px 10px}
-  .leaflet-popup-content .mono{color:var(--mute);display:block;font-size:12px}
-  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>快递看板</h1>
-    <div class="controls">
-      <input id="input" type="text" placeholder="单号,多个用空格或逗号分开,回车添加" autocomplete="off" spellcheck="false" aria-label="添加单号">
-      <button class="primary" id="add">添加</button>
-      <button id="refresh">全部刷新</button>
-    </div>
-    <div class="stamp" id="stamp"></div>
-  </header>
-  <div id="list"></div>
+<div class="top">
+  <h1>快递看板</h1><span class="stamp" id="stamp"></span>
+  <div class="controls">
+    <input id="input" type="text" placeholder="单号,多个用空格或逗号分开,回车添加" autocomplete="off" spellcheck="false" aria-label="添加单号">
+    <button class="pri" id="add">添加</button>
+    <button id="refresh">全部刷新</button>
+  </div>
+</div>
+<div class="layout">
+  <div class="mapwrap"><div id="map"></div>
+    <div class="legend"><span><i class="here"></i>当前位置</span><span><i class="past"></i>途经站</span><span><i class="dest"></i>目的地</span><span class="geo" id="geo-note"></span></div>
+  </div>
+  <div class="cards" id="list"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -343,48 +350,145 @@
 
   // ---- rendering ----
   var list = $("#list");
-  function chip(text, cls) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + '</span>'; }
+  var TOUCH = window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  function chip(text, cls, days) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + (days != null ? '<b>' + days + '</b> 天' : "") + '</span>'; }
+  function v(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
 
+  // ---- one shared map; every card owns a layer group on it ----
+  var map = L.map("map", { zoomControl: true, attributionControl: true, scrollWheelZoom: true, dragging: !TOUCH, worldCopyJump: false, zoomSnap: .5 });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
+  map.setView([40, 60], 3);
+  if (TOUCH) {
+    var Lock = L.Control.extend({ onAdd: function () {
+      var bar = L.DomUtil.create("div", "leaflet-bar"), a = L.DomUtil.create("a", "maplock", bar);
+      a.href = "#"; a.setAttribute("role", "button"); a.textContent = "解锁地图";
+      L.DomEvent.on(a, "click", function (e) {
+        L.DomEvent.stop(e);
+        if (map.dragging.enabled()) { map.dragging.disable(); a.textContent = "解锁地图"; a.classList.remove("on"); }
+        else { map.dragging.enable(); a.textContent = "锁定地图"; a.classList.add("on"); }
+      });
+      return bar;
+    } });
+    new Lock({ position: "topright" }).addTo(map);
+  }
+  var routes = {};   // n -> { layer, pts, dest, destName, pending, total, bounds }
+  var sel = null;
+  var geoNote = $("#geo-note");
+
+  function paintRoute(n) {
+    var r = routes[n]; if (!r) return;
+    var dim = sel != null && sel !== n, op = dim ? .35 : 1;
+    var acc = v("--acc"), here = v("--here"), ring = v("--panel");
+    r.layer.clearLayers();
+    var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
+    sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
+    var line = sorted.map(function (p) { return p.ll; });
+    if (!line.length && !r.dest) { r.bounds = null; return; }
+    var bounds = L.latLngBounds(line.length ? line : [r.dest]);
+    if (line.length > 1) L.polyline(line, { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
+    sorted.forEach(function (p, i) {
+      var last = i === sorted.length - 1;
+      var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
+                                      : { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer);
+      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
+      if (!last) m.bindTooltip(p.place);
+      if (last) r.here = m;
+    });
+    if (r.dest) {
+      if (line.length) L.polyline([line[line.length - 1], r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
+      L.circleMarker(r.dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地 " + (r.destName || ""));
+      bounds.extend(r.dest);
+    }
+    r.bounds = bounds;
+  }
+  function focusRoute(n, openPopup) {
+    var r = routes[n]; if (!r || !r.bounds) return;
+    var b = r.bounds, hasArea = b.getNorth() !== b.getSouth() || b.getEast() !== b.getWest();
+    if (hasArea) map.fitBounds(b.pad(.25), { maxZoom: 7 }); else map.setView(b.getCenter(), 6);
+    if (openPopup && r.here && !r.pending) r.here.openPopup();
+  }
+  function geoStatus() {
+    var pending = 0, miss = 0;
+    Object.keys(routes).forEach(function (n) { pending += routes[n].pending; miss += Math.max(0, routes[n].total - routes[n].pts.length - routes[n].pending); });
+    geoNote.textContent = pending ? "定位中…" : (miss ? miss + " 个站名未能定位" : "");
+  }
+  function buildRoute(n, s, traces) {
+    if (routes[n]) map.removeLayer(routes[n].layer);
+    var r = routes[n] = { layer: L.layerGroup().addTo(map), pts: [], dest: null, destName: null, pending: 0, total: 0, bounds: null, fitted: false, raf: 0 };
+    var ordered = traces.slice().reverse();
+    function schedule() {
+      if (r.raf) return;
+      r.raf = requestAnimationFrame(function () {
+        r.raf = 0; paintRoute(n); geoStatus();
+        var hasArea = r.bounds && (r.bounds.getNorth() !== r.bounds.getSouth() || r.bounds.getEast() !== r.bounds.getWest());
+        if (sel === n && (!r.pending || (!r.fitted && hasArea))) { focusRoute(n, !r.pending); r.fitted = true; }
+      });
+    }
+    ordered.forEach(function (t, i) {
+      var p = placeOfTrace(t); if (!p) return;
+      r.total++; r.pending++;
+      geocode(p).then(function (ll) { if (ll) r.pts.push({ i: i, ll: ll, t: t, place: p }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
+    });
+    r.destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
+    if (r.destName) { r.pending++; geocode(r.destName).then(function (ll) { r.dest = ll; }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
+    if (!r.pending) schedule();
+  }
+  function dropRoute(n) { if (routes[n]) { map.removeLayer(routes[n].layer); delete routes[n]; geoStatus(); } }
+  function select(n) {
+    sel = n;
+    list.querySelectorAll(".card").forEach(function (c) { c.classList.toggle("sel", c.dataset.n === n); });
+    Object.keys(routes).forEach(paintRoute);
+    focusRoute(n, true);
+  }
+
+  // ---- cards ----
   function shell(n, isShared) {
     var el = document.createElement("section");
     el.className = "card";
     el.dataset.n = n;
-    el.innerHTML = '<div class="card-head"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num mono">' + esc(n) + '</span>' +
+    el.innerHTML = '<div class="hd"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num">' + esc(n) + '</span>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>' + chip("查询中", "") +
       '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
       (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') +
       '</div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
-    $(".del", el).addEventListener("click", function () {
+    $(".del", el).addEventListener("click", function (e) {
+      e.stopPropagation();
       if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
       else { numbers = numbers.filter(function (x) { return x !== n; }); persist(); }
-      el.remove(); if (!list.querySelector(".card")) showEmpty(); stamp();
+      el.remove(); dropRoute(n);
+      if (sel === n) { var first = list.querySelector(".card"); sel = null; if (first) select(first.dataset.n); }
+      if (!list.querySelector(".card")) showEmpty(); stamp();
     });
     var copy = $('[data-role="copy"]', el);
-    copy.addEventListener("click", function () {
+    copy.addEventListener("click", function (e) {
+      e.stopPropagation();
       var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
+    });
+    $(".hd", el).addEventListener("click", function (e) {
+      if (e.target.closest("a, button, .grip")) return;
+      select(n);
     });
     enableDrag(el);
     return el;
   }
 
-  var TOUCH = window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  function kmOf(info) { var m = String(info || "").match(/距离?布列斯特\s*(\d+)\s*km/i); return m ? m[1] : null; }
 
   function renderShipment(el, n, s) {
     var st = (s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
-    var head = $(".card-head", el);
+    var head = $(".hd", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
 
-    // Carrier tracking link on the number itself (UPS / DHL / FedEx).
     var link = s.link || carrierUrl(s.outer_carrier_code, n);
-    if (link) $(".num", head).outerHTML = '<a class="num mono numlink" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.source || s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
+    if (link) $(".num", head).outerHTML = '<a class="num" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.source || s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
 
-    // Days since the first event (usually 已下单); stops counting once delivered.
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
     var last = parseTime(traces.length ? traces[0].time : null);
     var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
-    $(".chip", head).outerHTML = '<span class="chip ' + st[1] + '">' + esc(st[0]) + (days != null ? ' <b class="mono">' + days + '</b> 天' : "") + '</span>';
+    $(".chip", head).outerHTML = chip(st[0], st[1], days);
 
     var meta = [];
     if (s.source) meta.push(s.source);
@@ -394,97 +498,29 @@
     if (s.parcel_count) meta.push(s.parcel_count + " 件");
     var metaEl = $('[data-role="meta"]', head);
     metaEl.textContent = meta.join(" · ");
-    // Fill in the town once the postcode is resolved (async, cached).
     if (s.postcode && s.country) lookup(s.postcode + " " + countryEn(s.country)).then(function (r) {
       if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
     });
+
+    var body = $('[data-role="body"]', el);
+    var l = traces[0];
+    var nowHtml = l ? '<div class="now">' + chip(st[0], st[1]) + '<span class="txt">' + (placeOfTrace(l) ? '现在 <b>' + esc(placeOfTrace(l)) + '</b> · ' : '') + esc(l.info) +
+      ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' + (kmOf(l.info) ? '<span class="km">距布列斯特 ' + kmOf(l.info) + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var p = placeOfTrace(t);
-      return '<tr' + (i === 0 ? ' class="now"' : '') + ' data-i="' + i + '"><td class="t mono">' + esc(t.time) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
+      return '<tr' + (i === 0 ? ' class="cur"' : '') + '><td class="t">' + esc(String(t.time || "").slice(0, 16)) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
     }).join("");
-    var body = $('[data-role="body"]', el);
     var LIMIT = 6;
     var more = traces.length > LIMIT ? '<button type="button" class="more" data-role="more">展开全部 ' + traces.length + ' 条</button>' : '';
-    body.innerHTML = '<div class="body"><div class="trace collapsed"><table><thead><tr><th>时间</th><th>事件</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="2" class="note">暂无轨迹</td></tr>') + '</tbody></table>' + more + '</div><div class="map" id="map-' + esc(n) + '"></div></div>' +
-      '<div class="legend"><span><i class="now"></i>当前位置</span><span><i class="past"></i>途经站</span><span><i class="dest"></i>目的地</span><span data-role="geo-note"></span></div>';
+    body.innerHTML = nowHtml + '<div class="trace collapsed"><table><thead><tr><th>时间</th><th>事件</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="2" class="note">暂无轨迹</td></tr>') + '</tbody></table>' + more + '</div>';
     var moreBtn = $('[data-role="more"]', body);
     if (moreBtn) moreBtn.addEventListener("click", function () {
       var tr = moreBtn.parentNode, open = tr.classList.toggle("collapsed");
       moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
     });
-    drawMap(el, n, s, traces);
+    buildRoute(n, s, traces);
   }
-
-  function drawMap(el, n, s, traces) {
-    var holder = $("#map-" + CSS.escape(n), el);
-    if (!holder || typeof L === "undefined") { if (holder) holder.innerHTML = '<div class="note">地图库未加载</div>'; return; }
-    var map = L.map(holder, { zoomControl: true, attributionControl: true, scrollWheelZoom: true, dragging: !TOUCH });
-    if (TOUCH) {
-      var Lock = L.Control.extend({ onAdd: function () {
-        var bar = L.DomUtil.create("div", "leaflet-bar");
-        var a = L.DomUtil.create("a", "maplock", bar);
-        a.href = "#"; a.setAttribute("role", "button"); a.textContent = "解锁地图";
-        L.DomEvent.on(a, "click", function (e) {
-          L.DomEvent.stop(e);
-          if (map.dragging.enabled()) { map.dragging.disable(); a.textContent = "解锁地图"; a.classList.remove("on"); }
-          else { map.dragging.enable(); a.textContent = "锁定地图"; a.classList.add("on"); }
-        });
-        return bar;
-      } });
-      new Lock({ position: "topright" }).addTo(map);
-    }
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
-    map.setView([40, 60], 3);
-
-    // chronological order for the line: API returns newest first.
-    // Points are drawn as soon as each one resolves: KNOWN stations appear
-    // at once, geocoded ones fill in while the Nominatim queue drains.
-    var ordered = traces.slice().reverse();
-    var blue = "#2458c8", now = "#d9480f", ring = "#fff";
-    var layer = L.layerGroup().addTo(map), pts = [], dest = null, pending = 0, raf = 0, fitted = false;
-    var note = $('[data-role="geo-note"]', el);
-    var total = ordered.filter(function (t) { return placeOfTrace(t); }).length;
-
-    function redraw() {
-      raf = 0; layer.clearLayers();
-      var sorted = pts.slice().sort(function (a, b) { return a.i - b.i; });
-      // collapse consecutive duplicates, keeping the latest event at that place
-      sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
-      if (note) note.textContent = pending ? "定位中…" : (sorted.length ? (total - pts.length > 0 ? (total - pts.length) + " 个站名未能定位" : "") : (total ? "站名未能定位" : "轨迹中没有可定位的地点"));
-      if (!sorted.length && !dest) return;
-      var line = sorted.map(function (p) { return p.ll; }), bounds = L.latLngBounds(line.length ? line : [dest]);
-      if (line.length > 1) L.polyline(line, { color: blue, weight: 3, opacity: .85 }).addTo(layer);
-      sorted.forEach(function (p, i) {
-        var last = i === sorted.length - 1;
-        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? ring : blue, fillColor: last ? now : blue, fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(layer);
-        m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
-        if (last && !pending) m.openPopup();
-      });
-      if (dest) {
-        if (line.length) L.polyline([line[line.length - 1], dest], { color: blue, weight: 2, dashArray: "6 8", opacity: .6 }).addTo(layer);
-        L.circleMarker(dest, { radius: 7, color: blue, fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(layer)
-          .bindPopup('<b>目的地</b><span class="mono">' + esc(destName) + '</span>');
-        bounds.extend(dest);
-      }
-      // fit when the picture has some extent, and once more when the last lookup lands;
-      // a single point while others are pending stays at the world view
-      var hasArea = bounds.getNorth() !== bounds.getSouth() || bounds.getEast() !== bounds.getWest();
-      if (!pending || (!fitted && hasArea)) { map.fitBounds(bounds.pad(0.18), { maxZoom: 7 }); fitted = true; }
-    }
-    function schedule() { if (!raf) raf = requestAnimationFrame(redraw); }
-
-    ordered.forEach(function (t, i) {
-      var p = placeOfTrace(t); if (!p) return;
-      pending++;
-      geocode(p).then(function (ll) { if (ll) pts.push({ i: i, ll: ll, t: t, place: p }); }).catch(function () {}).then(function () { pending--; schedule(); });
-    });
-    var destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
-    if (destName) { pending++; geocode(destName).then(function (ll) { dest = ll; }).catch(function () {}).then(function () { pending--; schedule(); }); }
-    if (!pending) schedule();
-  }
-
-  function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
 
   // ---- 17TRACK via the Worker: anything the two forwarders do not know ----
   function fetchWorker(n) {
@@ -504,17 +540,15 @@
   }
 
   function renderItdida(el, n, reason) {
-    var head = $(".card-head", el);
-    var num = $(".num", head);
-    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
+    var head = $(".hd", el);
+    $(".num", head).outerHTML = '<a class="num" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
     $(".chip", head).outerHTML = chip("无记录", "");
     $('[data-role="meta"]', head).textContent = WORKER_URL ? "nextsls、itdida 和 17track 都没有这个单号" : "nextsls 和 itdida 都没有这个单号";
     $('[data-role="body"]', el).innerHTML =
       '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
   }
-
   function renderError(el, n, msg) {
-    $(".chip", $(".card-head", el)).outerHTML = chip("失败", "bad");
+    $(".chip", $(".hd", el)).outerHTML = chip("失败", "bad");
     $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
   }
 
@@ -525,7 +559,6 @@
     if (!order.length) return all;
     var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
     var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
-    // numbers added since the last drag: personal ones go on top, shared ones at the bottom
     return fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
   }
   function saveOrder() {
@@ -537,7 +570,7 @@
   function enableDrag(el) {
     var grip = $(".grip", el);
     grip.addEventListener("pointerdown", function (e) {
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       grip.setPointerCapture(e.pointerId);
       el.classList.add("dragging");
       function move(ev) {
@@ -575,27 +608,30 @@
       .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
   }
   function showEmpty() { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; }
-  // Full rebuild: first paint, "全部刷新", restore hidden, hash change.
   function render() {
     list.innerHTML = "";
+    Object.keys(routes).forEach(dropRoute);
     var all = allNumbers();
-    if (!all.length) { showEmpty(); stamp(); return; }
-    all.forEach(function (n) { var el = shell(n, shared.indexOf(n) >= 0); list.appendChild(el); load(el, n); });
+    if (!all.length) { showEmpty(); stamp(); sel = null; return; }
+    if (sel == null || all.indexOf(sel) < 0) sel = all[0];
+    all.forEach(function (n) { var el = shell(n, shared.indexOf(n) >= 0); if (n === sel) el.classList.add("sel"); list.appendChild(el); load(el, n); });
     stamp();
   }
-  // Insert one card where allNumbers() would place it, without touching the others.
   function addCard(n) {
     if (list.querySelector(".card[data-n=\"" + n + "\"]")) return;
     var empty = $(".empty", list); if (empty) empty.remove();
     var all = allNumbers(), i = all.indexOf(n), el = shell(n, shared.indexOf(n) >= 0), before = null;
     for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
     list.insertBefore(el, before);
+    if (sel == null) { sel = n; el.classList.add("sel"); }
     load(el, n);
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
     var hid = hidden.filter(function (n) { return shared.indexOf(n) >= 0; }).length;
-    $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length + " 个自己的 · " + (shared.length - hid) + " 个共享" +
+    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length, pub = shared.length - hid;
+    $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) +
+      " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") +
       (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "");
     var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; store(HIDE_KEY, hidden); render(); });
   }
@@ -616,6 +652,8 @@
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
   $("#refresh").addEventListener("click", function () { loadShared().then(render); });
   window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
+  window.addEventListener("resize", function () { map.invalidateSize(); });
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
 
   loadShared().then(render);
 })();
