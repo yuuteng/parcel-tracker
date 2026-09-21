@@ -73,7 +73,8 @@
   .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;transition:border-color .15s}
   .card.sel{border-color:var(--acc)}
   .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.6);position:relative;z-index:5}
-  .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:11px 14px;cursor:pointer}
+  .card{cursor:pointer}
+  .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:11px 14px}
   .grip{cursor:grab;color:var(--mute);font-size:16px;line-height:1;padding:2px 2px;user-select:none;-webkit-user-select:none;touch-action:none;letter-spacing:-2px}
   .grip:active{cursor:grabbing}
   .num{font:600 15px var(--mono);letter-spacing:.01em;color:var(--ink)}
@@ -467,8 +468,9 @@
       var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
     });
-    $(".hd", el).addEventListener("click", function (e) {
+    el.addEventListener("click", function (e) {
       if (e.target.closest("a, button, .grip")) return;
+      if (window.getSelection && String(window.getSelection()).length) return;
       select(n);
     });
     enableDrag(el);
