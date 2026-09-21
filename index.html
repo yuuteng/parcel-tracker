@@ -1,0 +1,624 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>快递看板</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#f4f3ef; --card:#ffffff; --ink:#1c1e22; --mute:#6f7480; --line:#dedcd5; --line-strong:#c9c6bd;
+    --accent:#2458c8; --accent-soft:#e4ebfa; --now:#d9480f; --ok:#1f7a45; --warn:#9a6700; --bad:#b42318;
+    --chip:#eeede8; --frame-bg:#ffffff;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
+      --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
+      --chip:#272b33; --frame-bg:#ffffff;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#15171b; --card:#1d2026; --ink:#e7e6e1; --mute:#9a9ea8; --line:#2c3037; --line-strong:#3a3f48;
+    --accent:#6f95ee; --accent-soft:#1f2b45; --now:#ff7a45; --ok:#4cbf7f; --warn:#e0b34a; --bad:#f0655a;
+    --chip:#272b33; --frame-bg:#ffffff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.55 "IBM Plex Sans",-apple-system,"PingFang SC","Helvetica Neue",sans-serif;padding-block:22px 64px;padding-inline:20px}
+  .wrap{max-width:1240px;margin:0 auto}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-bottom:18px}
+  header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+  header .stamp{color:var(--mute);font-size:13px}
+  .controls{display:flex;gap:8px;flex:1 1 380px;min-width:0}
+  .controls input{flex:1 1 auto;min-width:0;padding:9px 12px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Mono",ui-monospace,Menlo,monospace}
+  .controls input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  button{padding:9px 14px;border:1px solid var(--line-strong);border-radius:6px;background:var(--card);color:var(--ink);font:14px "IBM Plex Sans",sans-serif;cursor:pointer}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{opacity:.9;color:#fff}
+  button[disabled]{opacity:.5;cursor:default}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
+  .card-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .num{font-size:16px;font-weight:600}
+  .chip{font-size:12px;padding:2px 9px;border-radius:999px;background:var(--chip);color:var(--mute);white-space:nowrap}
+  .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.now{color:var(--now)} .chip.pick{color:var(--accent);background:var(--accent-soft)}
+  .chip b{font-weight:600;font-size:13px;margin-left:5px;margin-right:1px}
+  .meta{color:var(--mute);font-size:13px}
+  .spacer{flex:1}
+  .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:2px 6px}
+  .tag{font-size:11.5px;color:var(--mute);border:1px solid var(--line-strong);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
+  .del:hover{color:var(--bad)}
+  .grip{cursor:grab;color:var(--mute);font-size:16px;line-height:1;padding:2px 4px;user-select:none;-webkit-user-select:none;touch-action:none;letter-spacing:-2px}
+  .grip:active{cursor:grabbing}
+  .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.45);position:relative;z-index:5}
+  .stamp button{border:none;background:none;color:var(--accent);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
+
+  .body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
+  @media (max-width:900px){.body{grid-template-columns:1fr}}
+  .trace{overflow:auto;max-height:560px}
+  .trace .more{display:none}
+  @media (max-width:900px){
+    .trace{overflow:visible;max-height:none}
+    th{position:static}
+    .trace.collapsed tbody tr:nth-child(n+7){display:none}
+    .trace .more{display:block;width:100%;border:none;border-bottom:1px solid var(--line);border-radius:0;background:var(--chip);color:var(--accent);font-size:13px;padding:10px 14px}
+  }
+  .leaflet-bar a.maplock{width:auto;padding:0 9px;font:12px "IBM Plex Sans",sans-serif;white-space:nowrap}
+  .leaflet-bar a.maplock.on{color:var(--accent)}
+  table{border-collapse:collapse;width:100%}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);font-weight:600;position:sticky;top:0;background:var(--card)}
+  td.t{white-space:nowrap;color:var(--mute);font-size:13px;width:1%}
+  tr.now td{background:var(--accent-soft)}
+  tr.now td.t{color:var(--now);font-weight:500}
+  td .pin{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:middle;opacity:.7}
+  td .pin.none{background:transparent;border:1px solid var(--line-strong);opacity:1}
+  .map{min-height:420px;border-left:1px solid var(--line);background:var(--chip)}
+  @media (max-width:900px){.map{border-left:none;border-top:1px solid var(--line);min-height:340px}}
+  .map .leaflet-container{width:100%;height:100%;min-height:inherit;font-family:inherit;background:#f4f3ef}
+  .map .leaflet-tile-pane{filter:saturate(.25) sepia(.25) contrast(.9) brightness(1.04)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;padding:8px 14px;font-size:12px;color:var(--mute);border-top:1px solid var(--line)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .legend i.now{background:var(--now)} .legend i.past{background:var(--accent);opacity:.7} .legend i.dest{border:2px solid var(--accent);background:transparent}
+
+  .note{padding:14px 16px;color:var(--mute);font-size:14px}
+  .note b{color:var(--ink);font-weight:500}
+  a.numlink{color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent)}
+  a.numlink:hover{border-bottom-style:solid}
+  a.numlink:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.copy{padding:2px 9px;font-size:12px;border-radius:999px;color:var(--mute);margin-left:-4px}
+  button.copy:hover{color:var(--accent)}
+  .empty{padding:48px 0;text-align:center;color:var(--mute)}
+  .leaflet-popup-content{font:13px "IBM Plex Sans",sans-serif;margin:8px 10px}
+  .leaflet-popup-content .mono{color:var(--mute);display:block;font-size:12px}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>快递看板</h1>
+    <div class="controls">
+      <input id="input" type="text" placeholder="单号,多个用空格或逗号分开,回车添加" autocomplete="off" spellcheck="false" aria-label="添加单号">
+      <button class="primary" id="add">添加</button>
+      <button id="refresh">全部刷新</button>
+    </div>
+    <div class="stamp" id="stamp"></div>
+  </header>
+  <div id="list"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var APP = "642e7f7573f04222943d090e";
+  // Cloudflare Worker relaying 17TRACK (see worker/README.md). Empty = third source disabled.
+  var WORKER_URL = "https://parcel-17track.yuuteng.workers.dev";
+  var KEY = "parcel-tracker.numbers.v1";
+  var GEO_KEY = "parcel-tracker.geo.v3";
+  var HIDE_KEY = "parcel-tracker.hidden.v1";
+  var ORDER_KEY = "parcel-tracker.order.v1";
+  var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
+                 picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
+
+  // Coordinates for stations the China–Europe rail leg reports, so the first
+  // paint needs no geocoding round-trips. Anything else goes to Nominatim once
+  // and is cached in localStorage.
+  var KNOWN = {
+    "深圳": [22.5446, 114.0546], "深圳总部": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
+    "玉门东": [39.8152, 97.9201], "鄯善": [42.2914, 90.6423], "阿拉山口": [45.3632, 82.4341],
+    "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [54.7751, 69.0978],
+    "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677], "KUSHMURUN": [52.4518, 64.6152],
+    "布列斯特": [52.0938, 23.6852], "BREST": [52.0938, 23.6852], "MALASZEWICZE": [52.1960, 23.4310],
+    "DUISBURG": [51.4344, 6.7623], "杜伊斯堡": [51.4344, 6.7623], "HAMBURG": [53.5511, 9.9937],
+    "WARSAW": [52.2297, 21.0122], "华沙": [52.2297, 21.0122], "PARIS": [48.8566, 2.3522], "巴黎": [48.8566, 2.3522],
+    "成都": [30.5728, 104.0668], "CHENGDU": [30.5728, 104.0668], "广州": [23.1291, 113.2644], "GUANGZHOU": [23.1291, 113.2644],
+    "上海": [31.2304, 121.4737], "SHANGHAI": [31.2304, 121.4737], "义乌": [29.3068, 120.0750], "YIWU": [29.3068, 120.0750],
+    "西安": [34.3416, 108.9398], "郑州": [34.7466, 113.6254], "武汉": [30.5928, 114.3055], "北京": [39.9042, 116.4074],
+    "杭州": [30.2741, 120.1551], "东莞": [23.0207, 113.7518], "苏州": [31.2989, 120.5853], "宁波": [29.8683, 121.5440],
+    "昆明": [25.0389, 102.7183], "乌鲁木齐": [43.8256, 87.6168], "霍尔果斯": [44.2136, 80.4115], "二连浩特": [43.6531, 111.9769],
+    "满洲里": [49.5978, 117.3787], "香港": [22.3193, 114.1694], "HONG KONG": [22.3193, 114.1694], "SHENZHEN": [22.5446, 114.0546],
+    "CHONGQING": [29.5630, 106.5516], "莫斯科": [55.7558, 37.6173], "MOSCOW": [55.7558, 37.6173], "明斯克": [53.9006, 27.5590], "MINSK": [53.9006, 27.5590],
+    "ROISSY": [49.0097, 2.5479], "CHILLY-MAZARIN": [48.7020, 2.3122], "SURESNES": [48.8712, 2.2290], "LYON": [45.7640, 4.8357],
+    "MARSEILLE": [43.2965, 5.3698], "FRANKFURT": [50.1109, 8.6821], "LIEGE": [50.6326, 5.5797], "LIÈGE": [50.6326, 5.5797],
+    "AMSTERDAM": [52.3676, 4.9041], "LONDON": [51.5074, -0.1278]
+  };
+
+  function $(s, r) { return (r || document).querySelector(s); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+
+  // ---- shared numbers come from numbers.json in the repo; personal ones from
+  // the URL hash, then localStorage ----
+  var shared = [];
+  function loadShared() {
+    return fetch("numbers.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { shared = (j && j.shared || []).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean); })
+      .catch(function () { shared = []; });
+  }
+  function fromHash() {
+    var m = location.hash.match(/[#&]n=([^&]+)/);
+    return m ? decodeURIComponent(m[1]).split(",").map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean) : null;
+  }
+  var numbers = fromHash() || read(KEY, null) || [];
+  var hidden = read(HIDE_KEY, []);
+  var order = read(ORDER_KEY, []);
+  function persist() {
+    store(KEY, numbers);
+    history.replaceState(null, "", location.pathname + location.search + (numbers.length ? "#n=" + encodeURIComponent(numbers.join(",")) : ""));
+  }
+  persist();
+
+  // ---- nextsls ----
+  function fetchShipment(n) {
+    var url = "https://tracking.nextsls.com/rest/trace/tracking/lists?app=" + encodeURIComponent(APP) + "&number=" + encodeURIComponent(n);
+    return fetch(url, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }).then(function (j) {
+      var s = j && j.data && j.data.shipment;
+      if (!s) { var e = new Error(j && j.info ? j.info : "无记录"); e.notFound = true; throw e; }
+      return s;
+    });
+  }
+
+  // ---- itdida: one request in flight at a time, up to 10 numbers per call ----
+  var itPending = [], itTimer = null, itBusy = false;
+  function fetchItdida(n) {
+    return new Promise(function (res, rej) {
+      itPending.push({ n: n, res: res, rej: rej });
+      if (!itTimer) itTimer = setTimeout(function () { itTimer = null; itFlush(); }, 250);
+    });
+  }
+  // The API answers 503 to a second request within about a second, so calls
+  // are spaced out and one failed batch is retried once.
+  function itFlush() {
+    if (itBusy || !itPending.length) return;
+    itBusy = true;
+    var batch = itPending.splice(0, 10);
+    var url = "https://yen.itdida.com/itdida-api/queryTracks?no=" + encodeURIComponent(batch.map(function (b) { return b.n; }).join(","));
+    function call() {
+      return fetch(url, { cache: "no-store" }).then(function (r) {
+        if (!r.ok) throw new Error("itdida HTTP " + r.status);
+        return r.json();
+      });
+    }
+    call().catch(function () { return new Promise(function (res) { setTimeout(res, 2000); }).then(call); })
+      .then(function (j) {
+        var byNo = {};
+        (j && j.data || []).forEach(function (item) { byNo[String(item.no).toUpperCase()] = item; });
+        batch.forEach(function (b) {
+          try { b.res(itdidaShipment(b.n, byNo[b.n.toUpperCase()])); } catch (e) { b.rej(e); }
+        });
+      }).catch(function (e) {
+        batch.forEach(function (b) { b.rej(e); });
+      }).then(function () { setTimeout(function () { itBusy = false; itFlush(); }, 1200); });
+  }
+  function itdidaCls(desc) {
+    var d = String(desc || "");
+    if (/签收|delivered/i.test(d)) return "ok";
+    if (/退|异常|问题|拒收|exception|return/i.test(d)) return "bad";
+    if (/收货|揽收|入库|收件/.test(d)) return "pick";
+    return "warn";
+  }
+  function itdidaShipment(n, item) {
+    var tracks = item && Array.isArray(item.trackList) ? item.trackList : [];
+    if (!tracks.length) { var e = new Error(item && item.errorMsg || "itdida 无记录"); e.notFound = true; throw e; }
+    tracks.sort(function (a, b) { return String(b.time).localeCompare(String(a.time)); });
+    var d = item.detail || {};
+    return {
+      source: "itdida", link: itdidaUrl(n),
+      status: tracks[0].desc || "有轨迹", statusCls: itdidaCls(tracks[0].desc),
+      country: d.guoJia || "", postcode: "", parcel_count: d.numOfUnits || 0,
+      outer_carrier_code: item.zhuanDanHao || "",
+      traces: tracks.map(function (t) {
+        var place = t.localtion || [t.eventCity, t.eventProvince, t.eventCountry].filter(Boolean).join(", ");
+        return { time: String(t.time || "").replace("T", " ").slice(0, 19), info: t.desc || t.eventCodeDesc || "", place: place || null };
+      })
+    };
+  }
+
+  // ---- place extraction from free-text events ----
+  var SKIP = /已下单|已发运|装柜|班列|label|created|派送|签收|清关|海关|customs|delivered|out for/i;
+  function placeOf(info) {
+    if (!info) return null;
+    var m = info.match(/现站[:：]\s*([^，,。]+)/);
+    if (m) return clean(m[1]);
+    m = info.match(/^(\S+?)(集散中心|仓|中心)/);
+    if (m) return clean(m[1]);
+    if (SKIP.test(info)) return null;
+    if (/^[一-龥]{2,6}$/.test(info.trim())) return info.trim();
+    m = info.match(/^([A-Za-z][A-Za-z .'-]{2,})\s*(,|$)/);
+    if (m) return clean(m[1]);
+    return null;
+  }
+  // Strip trailing postal codes ("成都市 61002500" → "成都市") and drop
+  // country-code-only locations ("CN"), so lookups hit KNOWN / cache more often.
+  function normPlace(p) {
+    if (!p) return null;
+    p = String(p).trim().replace(/[\s,，]*\d{5,}\s*$/, "").replace(/[\s,，]+$/, "").trim();
+    if (!p || /^[A-Z]{2,3}$/.test(p)) return null;
+    return p;
+  }
+  function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
+  function clean(s) {
+    return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
+  }
+
+  // ---- geocoding with a serial queue, 1.1 s apart, cached ----
+  var geoCache = read(GEO_KEY, {});
+  var queue = [], busy = false;
+  var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
+  // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
+  // stations come from KNOWN without a network call.
+  function lookup(name) {
+    var key = name.toUpperCase();
+    var k = KNOWN[key] || KNOWN[name] || KNOWN[name.replace(/(市|县|区)$/, "")];
+    if (k) return Promise.resolve({ ll: k, town: null });
+    var c = geoCache[key];
+    if (c && c.ll) return Promise.resolve(c);
+    if (c && c.miss && Date.now() - c.miss < MISS_TTL) return Promise.resolve(null);
+    return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
+  }
+  function geocode(name) { return lookup(name).then(function (r) { return r ? r.ll : null; }); }
+  function pump() {
+    if (busy || !queue.length) return;
+    busy = true;
+    var job = queue.shift();
+    nominatim(job.name)
+      .then(function (r) { return r || wikipedia(job.name); })
+      .catch(function () { return null; })
+      .then(function (r) {
+        geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); job.res(r);
+        setTimeout(function () { busy = false; pump(); }, 1100);
+      });
+  }
+  function nominatim(name) {
+    return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=" + encodeURIComponent(name), { cache: "force-cache" })
+      .then(function (r) { return r.json(); })
+      .then(function (a) {
+        var hit = a && a[0], ad = hit && hit.address || {};
+        return hit ? { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null } : null;
+      });
+  }
+  // Wikipedia resolves spellings OSM only has under the local name
+  // (Kushmurun → Qusmuryn): exact title following redirects, then full-text
+  // search; first article carrying coordinates wins.
+  function wikipedia(name) {
+    var base = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=coordinates&";
+    function pick(d) {
+      var pages = d && d.query && d.query.pages || {};
+      var hit = Object.keys(pages).map(function (k) { return pages[k]; })
+        .sort(function (a, b) { return (a.index || 0) - (b.index || 0); })
+        .filter(function (p) { return p.coordinates && p.coordinates.length; })[0];
+      return hit ? { ll: [hit.coordinates[0].lat, hit.coordinates[0].lon], town: null } : null;
+    }
+    function get(q) { return fetch(base + q, { cache: "force-cache" }).then(function (r) { return r.json(); }).then(pick); }
+    return get("redirects=1&titles=" + encodeURIComponent(name)).then(function (r) {
+      return r || get("generator=search&gsrlimit=3&gsrsearch=" + encodeURIComponent(name));
+    });
+  }
+  function countryEn(c) { return { "法国": "France", "德国": "Germany", "比利时": "Belgium", "荷兰": "Netherlands", "西班牙": "Spain", "意大利": "Italy", "英国": "United Kingdom", "中国": "China" }[c] || c; }
+  function carrierUrl(code, n) {
+    var c = String(code || "").toUpperCase();
+    if (c === "UPS") return "https://www.ups.com/track?loc=fr_FR&tracknum=" + encodeURIComponent(n);
+    if (c === "DHL") return "https://www.dhl.com/fr-fr/home/tracking.html?tracking-id=" + encodeURIComponent(n);
+    if (c === "FEDEX") return "https://www.fedex.com/fedextrack/?trknbr=" + encodeURIComponent(n);
+    return null;
+  }
+  function parseTime(s) { var m = String(s || "").match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]) : null; }
+  function daysBetween(a, b) { return Math.max(0, Math.round((b - a) / 86400000)); }
+
+  // ---- rendering ----
+  var list = $("#list");
+  function chip(text, cls) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + '</span>'; }
+
+  function shell(n, isShared) {
+    var el = document.createElement("section");
+    el.className = "card";
+    el.dataset.n = n;
+    el.innerHTML = '<div class="card-head"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num mono">' + esc(n) + '</span>' +
+      '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button>' + chip("查询中", "") +
+      '<span class="meta" data-role="meta"></span><span class="spacer"></span>' +
+      (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
+                : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') +
+      '</div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
+    $(".del", el).addEventListener("click", function () {
+      if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
+      else { numbers = numbers.filter(function (x) { return x !== n; }); persist(); }
+      el.remove(); if (!list.querySelector(".card")) showEmpty(); stamp();
+    });
+    var copy = $('[data-role="copy"]', el);
+    copy.addEventListener("click", function () {
+      var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
+    });
+    enableDrag(el);
+    return el;
+  }
+
+  var TOUCH = window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+
+  function renderShipment(el, n, s) {
+    var st = (s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
+    var head = $(".card-head", el);
+    var traces = Array.isArray(s.traces) ? s.traces : [];
+
+    // Carrier tracking link on the number itself (UPS / DHL / FedEx).
+    var link = s.link || carrierUrl(s.outer_carrier_code, n);
+    if (link) $(".num", head).outerHTML = '<a class="num mono numlink" href="' + esc(link) + '" target="_blank" rel="noopener" title="在 ' + esc(s.source || s.outer_carrier_code) + ' 官网查询">' + esc(n) + ' ↗</a>';
+
+    // Days since the first event (usually 已下单); stops counting once delivered.
+    var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
+    var last = parseTime(traces.length ? traces[0].time : null);
+    var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
+    $(".chip", head).outerHTML = '<span class="chip ' + st[1] + '">' + esc(st[0]) + (days != null ? ' <b class="mono">' + days + '</b> 天' : "") + '</span>';
+
+    var meta = [];
+    if (s.source) meta.push(s.source);
+    if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
+    var destText = s.country ? countryEn(s.country) + (s.postcode ? " " + s.postcode : "") : "";
+    if (destText) meta.push(destText);
+    if (s.parcel_count) meta.push(s.parcel_count + " 件");
+    var metaEl = $('[data-role="meta"]', head);
+    metaEl.textContent = meta.join(" · ");
+    // Fill in the town once the postcode is resolved (async, cached).
+    if (s.postcode && s.country) lookup(s.postcode + " " + countryEn(s.country)).then(function (r) {
+      if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
+    });
+    var rows = traces.map(function (t, i) {
+      var p = placeOfTrace(t);
+      return '<tr' + (i === 0 ? ' class="now"' : '') + ' data-i="' + i + '"><td class="t mono">' + esc(t.time) + '</td><td><span class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></span>' + esc(t.info) + '</td></tr>';
+    }).join("");
+    var body = $('[data-role="body"]', el);
+    var LIMIT = 6;
+    var more = traces.length > LIMIT ? '<button type="button" class="more" data-role="more">展开全部 ' + traces.length + ' 条</button>' : '';
+    body.innerHTML = '<div class="body"><div class="trace collapsed"><table><thead><tr><th>时间</th><th>事件</th></tr></thead><tbody>' +
+      (rows || '<tr><td colspan="2" class="note">暂无轨迹</td></tr>') + '</tbody></table>' + more + '</div><div class="map" id="map-' + esc(n) + '"></div></div>' +
+      '<div class="legend"><span><i class="now"></i>当前位置</span><span><i class="past"></i>途经站</span><span><i class="dest"></i>目的地</span><span data-role="geo-note"></span></div>';
+    var moreBtn = $('[data-role="more"]', body);
+    if (moreBtn) moreBtn.addEventListener("click", function () {
+      var tr = moreBtn.parentNode, open = tr.classList.toggle("collapsed");
+      moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
+    });
+    drawMap(el, n, s, traces);
+  }
+
+  function drawMap(el, n, s, traces) {
+    var holder = $("#map-" + CSS.escape(n), el);
+    if (!holder || typeof L === "undefined") { if (holder) holder.innerHTML = '<div class="note">地图库未加载</div>'; return; }
+    var map = L.map(holder, { zoomControl: true, attributionControl: true, scrollWheelZoom: true, dragging: !TOUCH });
+    if (TOUCH) {
+      var Lock = L.Control.extend({ onAdd: function () {
+        var bar = L.DomUtil.create("div", "leaflet-bar");
+        var a = L.DomUtil.create("a", "maplock", bar);
+        a.href = "#"; a.setAttribute("role", "button"); a.textContent = "解锁地图";
+        L.DomEvent.on(a, "click", function (e) {
+          L.DomEvent.stop(e);
+          if (map.dragging.enabled()) { map.dragging.disable(); a.textContent = "解锁地图"; a.classList.remove("on"); }
+          else { map.dragging.enable(); a.textContent = "锁定地图"; a.classList.add("on"); }
+        });
+        return bar;
+      } });
+      new Lock({ position: "topright" }).addTo(map);
+    }
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
+    map.setView([40, 60], 3);
+
+    // chronological order for the line: API returns newest first.
+    // Points are drawn as soon as each one resolves: KNOWN stations appear
+    // at once, geocoded ones fill in while the Nominatim queue drains.
+    var ordered = traces.slice().reverse();
+    var blue = "#2458c8", now = "#d9480f", ring = "#fff";
+    var layer = L.layerGroup().addTo(map), pts = [], dest = null, pending = 0, raf = 0, fitted = false;
+    var note = $('[data-role="geo-note"]', el);
+    var total = ordered.filter(function (t) { return placeOfTrace(t); }).length;
+
+    function redraw() {
+      raf = 0; layer.clearLayers();
+      var sorted = pts.slice().sort(function (a, b) { return a.i - b.i; });
+      // collapse consecutive duplicates, keeping the latest event at that place
+      sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
+      if (note) note.textContent = pending ? "定位中…" : (sorted.length ? (total - pts.length > 0 ? (total - pts.length) + " 个站名未能定位" : "") : (total ? "站名未能定位" : "轨迹中没有可定位的地点"));
+      if (!sorted.length && !dest) return;
+      var line = sorted.map(function (p) { return p.ll; }), bounds = L.latLngBounds(line.length ? line : [dest]);
+      if (line.length > 1) L.polyline(line, { color: blue, weight: 3, opacity: .85 }).addTo(layer);
+      sorted.forEach(function (p, i) {
+        var last = i === sorted.length - 1;
+        var m = L.circleMarker(p.ll, { radius: last ? 9 : 5, color: last ? ring : blue, fillColor: last ? now : blue, fillOpacity: .95, weight: last ? 3 : 1.5 }).addTo(layer);
+        m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
+        if (last && !pending) m.openPopup();
+      });
+      if (dest) {
+        if (line.length) L.polyline([line[line.length - 1], dest], { color: blue, weight: 2, dashArray: "6 8", opacity: .6 }).addTo(layer);
+        L.circleMarker(dest, { radius: 7, color: blue, fillColor: "transparent", fillOpacity: 0, weight: 2 }).addTo(layer)
+          .bindPopup('<b>目的地</b><span class="mono">' + esc(destName) + '</span>');
+        bounds.extend(dest);
+      }
+      // fit when the picture has some extent, and once more when the last lookup lands;
+      // a single point while others are pending stays at the world view
+      var hasArea = bounds.getNorth() !== bounds.getSouth() || bounds.getEast() !== bounds.getWest();
+      if (!pending || (!fitted && hasArea)) { map.fitBounds(bounds.pad(0.18), { maxZoom: 7 }); fitted = true; }
+    }
+    function schedule() { if (!raf) raf = requestAnimationFrame(redraw); }
+
+    ordered.forEach(function (t, i) {
+      var p = placeOfTrace(t); if (!p) return;
+      pending++;
+      geocode(p).then(function (ll) { if (ll) pts.push({ i: i, ll: ll, t: t, place: p }); }).catch(function () {}).then(function () { pending--; schedule(); });
+    });
+    var destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
+    if (destName) { pending++; geocode(destName).then(function (ll) { dest = ll; }).catch(function () {}).then(function () { pending--; schedule(); }); }
+    if (!pending) schedule();
+  }
+
+  function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
+
+  // ---- 17TRACK via the Worker: anything the two forwarders do not know ----
+  function fetchWorker(n) {
+    if (!WORKER_URL) { var e0 = new Error("nextsls 和 itdida 都没有这个单号"); e0.notFound = true; return Promise.reject(e0); }
+    return fetch(WORKER_URL.replace(/\/$/, "") + "/?no=" + encodeURIComponent(n), { cache: "no-store" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        var j = x.j || {};
+        if (!x.ok || j.error) throw new Error("17track:" + (j.error || "HTTP error"));
+        if (!j.traces || !j.traces.length) { var e = new Error(j.registered ? "17track 刚登记这个单号,一两分钟后点\"全部刷新\"" : "17track 也没有这个单号的轨迹"); e.notFound = true; throw e; }
+        return {
+          source: "17track", link: j.link, status: j.status, statusCls: j.statusCls,
+          country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",
+          traces: j.traces.map(function (t) { return { time: t.time, info: t.info, place: t.place || null }; })
+        };
+      });
+  }
+
+  function renderItdida(el, n, reason) {
+    var head = $(".card-head", el);
+    var num = $(".num", head);
+    num.outerHTML = '<a class="num mono numlink" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
+    $(".chip", head).outerHTML = chip("无记录", "");
+    $('[data-role="meta"]', head).textContent = WORKER_URL ? "nextsls、itdida 和 17track 都没有这个单号" : "nextsls 和 itdida 都没有这个单号";
+    $('[data-role="body"]', el).innerHTML =
+      '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
+  }
+
+  function renderError(el, n, msg) {
+    $(".chip", $(".card-head", el)).outerHTML = chip("失败", "bad");
+    $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
+  }
+
+  function allNumbers() {
+    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; });
+    var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0; });
+    var all = mine.concat(pub);
+    if (!order.length) return all;
+    var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
+    var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
+    // numbers added since the last drag: personal ones go on top, shared ones at the bottom
+    return fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
+  }
+  function saveOrder() {
+    order = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
+    store(ORDER_KEY, order);
+  }
+
+  // ---- drag to reorder: pointer events on the grip, works with touch ----
+  function enableDrag(el) {
+    var grip = $(".grip", el);
+    grip.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      el.classList.add("dragging");
+      function move(ev) {
+        var over = document.elementFromPoint(ev.clientX, ev.clientY);
+        var target = over && over.closest ? over.closest(".card") : null;
+        if (!target || target === el || target.parentNode !== list) return;
+        var r = target.getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) list.insertBefore(el, target); else list.insertBefore(el, target.nextSibling);
+      }
+      function up() {
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+        el.classList.remove("dragging");
+        saveOrder(); stamp();
+      }
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
+  }
+  function load(el, n) {
+    fetchShipment(n)
+      .catch(function (e) {
+        if (!e.notFound) throw e;
+        $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
+        return fetchItdida(n);
+      })
+      .catch(function (e) {
+        if (!e.notFound || !WORKER_URL) throw e;
+        $('[data-role="body"] .note', el).textContent = "itdida 无记录,正在读取 17track…";
+        return fetchWorker(n);
+      })
+      .then(function (s) { renderShipment(el, n, s); })
+      .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
+  }
+  function showEmpty() { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; }
+  // Full rebuild: first paint, "全部刷新", restore hidden, hash change.
+  function render() {
+    list.innerHTML = "";
+    var all = allNumbers();
+    if (!all.length) { showEmpty(); stamp(); return; }
+    all.forEach(function (n) { var el = shell(n, shared.indexOf(n) >= 0); list.appendChild(el); load(el, n); });
+    stamp();
+  }
+  // Insert one card where allNumbers() would place it, without touching the others.
+  function addCard(n) {
+    if (list.querySelector(".card[data-n=\"" + n + "\"]")) return;
+    var empty = $(".empty", list); if (empty) empty.remove();
+    var all = allNumbers(), i = all.indexOf(n), el = shell(n, shared.indexOf(n) >= 0), before = null;
+    for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
+    list.insertBefore(el, before);
+    load(el, n);
+  }
+  function stamp() {
+    var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
+    var hid = hidden.filter(function (n) { return shared.indexOf(n) >= 0; }).length;
+    $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) + " · " + numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length + " 个自己的 · " + (shared.length - hid) + " 个共享" +
+      (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "");
+    var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; store(HIDE_KEY, hidden); render(); });
+  }
+
+  function add() {
+    var raw = $("#input").value.trim().toUpperCase();
+    if (!raw) return;
+    var fresh = [];
+    raw.split(/[\s,，;；]+/).forEach(function (n) {
+      if (!n) return;
+      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); store(HIDE_KEY, hidden); fresh.push(n); return; }
+      if (numbers.indexOf(n) < 0) { numbers.unshift(n); fresh.push(n); }
+    });
+    $("#input").value = ""; persist();
+    fresh.forEach(addCard); stamp();
+  }
+  $("#add").addEventListener("click", add);
+  $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
+  $("#refresh").addEventListener("click", function () { loadShared().then(render); });
+  window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
+
+  loadShared().then(render);
+})();
+</script>
+</body>
+</html>

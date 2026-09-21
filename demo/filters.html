@@ -1,0 +1,49 @@
+<!doctype html><html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OSM 滤镜配色</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f4f3ef;--card:#ffffff;--ink:#1c1e22;--mute:#6f7480;--line:#dedcd5;--accent:#2458c8;--now:#d9480f;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#15171b;--card:#1d2026;--ink:#e7e6e1;--mute:#9a9ea8;--line:#2c3037;--accent:#6f95ee;--now:#ff7a45;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 "IBM Plex Sans",-apple-system,"PingFang SC",system-ui,sans-serif;padding:16px 16px 48px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:18px;margin:0 0 4px}
+p.lead{margin:0 0 18px;color:var(--mute);font-size:13px}
+.c{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+.c h2{margin:0;padding:10px 14px;font-size:14px;font-weight:600;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.c h2 small{font-weight:400;color:var(--mute);font-size:12px}
+.c h2 code{margin-left:auto;font:11px ui-monospace,Menlo,monospace;color:var(--mute)}
+.m{height:56vh;min-height:340px}
+.leaflet-container{font-family:inherit;background:var(--bg)}
+#a .leaflet-tile-pane{filter:grayscale(1) contrast(.85) brightness(1.06) sepia(.12)}
+#b .leaflet-tile-pane{filter:saturate(.4) contrast(.92) brightness(1.03)}
+#c .leaflet-tile-pane{filter:grayscale(1) sepia(.4) hue-rotate(185deg) saturate(.75) brightness(1.06) contrast(.88)}
+#d .leaflet-tile-pane{filter:saturate(.25) sepia(.25) contrast(.9) brightness(1.04)}
+#e .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) grayscale(.55) brightness(.82) contrast(.92)}
+#e{background:#15171b}
+</style></head><body><div class="wrap">
+<h1>OSM 底图 · 滤镜配色</h1>
+<p class="lead">同一份 OSM 瓦片,只换 CSS filter。线路用页面的蓝 #2458c8,当前站用橙 #d9480f,和快递看板一致。最后一块是深色模式用的反色方案。</p>
+<div class="c"><h2>A 暖灰 <small>demo 里用的那个</small><code>grayscale(1) contrast(.85) brightness(1.06) sepia(.12)</code></h2><div class="m" id="a"></div></div>
+<div class="c"><h2>B 低饱和原色 <small>保留 OSM 自己的水蓝、绿地,压到四成饱和度</small><code>saturate(.4) contrast(.92) brightness(1.03)</code></h2><div class="m" id="b"></div></div>
+<div class="c"><h2>C 冷灰蓝 <small>灰底带一点蓝,呼应页面 accent</small><code>grayscale(1) sepia(.4) hue-rotate(185deg) saturate(.75) …</code></h2><div class="m" id="c"></div></div>
+<div class="c"><h2>D 米白纸 <small>偏暖、接近页面背景 #f4f3ef</small><code>saturate(.25) sepia(.25) contrast(.9) brightness(1.04)</code></h2><div class="m" id="d"></div></div>
+<div class="c"><h2>E 深色反色 <small>深色模式用;文字变浅、水面变深</small><code>invert(1) hue-rotate(180deg) grayscale(.55) brightness(.82)</code></h2><div class="m" id="e"></div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  var pts=[[22.5446,114.0546],[29.563,106.5516],[31.9525,104.9347],[39.8152,97.9201],[42.2914,90.6423],[45.3632,82.4341],[45.2527,82.4864],[54.7751,69.0978],[46.845,74.9727],[51.116,71.4677]];
+  var names=["深圳","重庆","江油","玉门东","鄯善","阿拉山口","多斯特克","BESKOL","BALKHASH","NUR-SULTAN"];
+  ["a","b","c","d","e"].forEach(function(id){
+    var dark=id==="e",blue=dark?"#6f95ee":"#2458c8",now=dark?"#ff7a45":"#d9480f",ring=dark?"#1d2026":"#fff";
+    var m=L.map(id,{attributionControl:true}).setView([44,86],4);m.attributionControl.setPrefix("");
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap"}).addTo(m);
+    L.polyline(pts,{color:blue,weight:3,opacity:.9}).addTo(m);
+    L.polyline([pts[pts.length-1],[52.0938,23.6852]],{color:blue,weight:1.5,dashArray:"5 7",opacity:.7}).addTo(m);
+    pts.forEach(function(p,i){if(i<pts.length-1)L.circleMarker(p,{radius:4,color:blue,fillColor:blue,fillOpacity:.9,weight:1}).addTo(m).bindTooltip(names[i])});
+    L.circleMarker([52.0938,23.6852],{radius:6,color:blue,fillColor:"transparent",fillOpacity:0,weight:2}).addTo(m).bindTooltip("布列斯特");
+    L.circleMarker(pts[pts.length-1],{radius:8,color:ring,fillColor:now,fillOpacity:1,weight:3}).addTo(m).bindPopup("<b>NUR-SULTAN</b><br>2026-09-14 14:42 · 距布列斯特 3928 km").openPopup();
+  });
+})();
+</script></body></html>

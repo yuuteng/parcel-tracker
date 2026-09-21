@@ -1,0 +1,62 @@
+<!doctype html><html lang="zh-Hans"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>底图对比</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#f3f1ec;--paper:#fbfaf7;--ink:#1b1f1e;--mute:#8a908c;--line:#e3e0d8;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#151614;--paper:#1c1e1b;--ink:#ebeae4;--mute:#7e827b;--line:#2b2e2a;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,-apple-system,"PingFang SC",system-ui,sans-serif;padding:16px 16px 48px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:18px;margin:0 0 4px}
+p.lead{margin:0 0 18px;color:var(--mute);font-size:13px}
+.c{background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:18px}
+.c h2{margin:0;padding:10px 14px;font-size:14px;font-weight:600;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.c h2 small{font-weight:400;color:var(--mute);font-size:12px}
+.m{height:62vh;min-height:360px;background:#e5e5e5}
+.err{padding:10px 14px;color:#b3261e;font:12px ui-monospace,Menlo,monospace}
+#a .leaflet-tile-pane,#d .leaflet-tile-pane{filter:grayscale(1) contrast(.85) brightness(1.06) sepia(.12)}
+@media (prefers-color-scheme:dark){#a .leaflet-tile-pane,#d .leaflet-tile-pane{filter:grayscale(1) invert(1) brightness(.8) contrast(.9) hue-rotate(180deg)}}
+.leaflet-container{font-family:inherit}
+</style></head><body><div class="wrap">
+<h1>底图对比</h1>
+<p class="lead">同一条线路(深圳 → NUR-SULTAN,虚线到布列斯特)。放大到城市级别看标注。深色模式下 ② ③ 自动切到 Esri 深灰底图,① ④ 用反色滤镜。OSM 官方瓦片只有当地语言标注,不能切换,所以英文看 ②③,中文看 ④。</p>
+<div class="c"><h2>① OSM 瓦片 + CSS 去色滤镜 <small>现有底图,一行 CSS;标注为当地语言</small></h2><div class="m" id="a"></div></div>
+<div class="c"><h2>② Esri Light / Dark Gray 底图 <small>无需 key;英文国家、城市名;为叠数据设计</small></h2><div class="m" id="b"></div></div>
+<div class="c"><h2>③ 矢量国界 + Esri 标注层 <small>方向稿里的纯色国界,只把英文标注叠上来</small></h2><div class="m" id="c"></div></div>
+<div class="c"><h2>④ 高德瓦片 + CSS 去色滤镜 <small>中文国家、城市名;非官方接口,中国境内有 GCJ-02 偏移</small></h2><div class="m" id="d"></div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="world.js"></script>
+<script>
+(function(){
+  var dark=window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var pts=[[22.5446,114.0546],[29.563,106.5516],[31.9525,104.9347],[39.8152,97.9201],[42.2914,90.6423],[45.3632,82.4341],[45.2527,82.4864],[54.7751,69.0978],[46.845,74.9727],[51.116,71.4677]];
+  var names=["深圳","重庆","江油","玉门东","鄯善","阿拉山口","多斯特克","BESKOL","BALKHASH","NUR-SULTAN"];
+  var ink=dark?"#ebeae4":"#1f2a2a",here="#c8371f",ring=dark?"#1c1e1b":"#fff";
+  var ESRI="https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_"+(dark?"Dark":"Light")+"_Gray_";
+  function route(m){
+    L.polyline(pts,{color:ink,weight:3}).addTo(m);
+    L.polyline([pts[pts.length-1],[52.0938,23.6852]],{color:ink,weight:1.5,dashArray:"4 7",opacity:.8}).addTo(m);
+    pts.forEach(function(p,i){if(i<pts.length-1)L.circleMarker(p,{radius:3.5,color:ink,fillColor:ink,fillOpacity:1,weight:1}).addTo(m).bindTooltip(names[i])});
+    L.circleMarker([52.0938,23.6852],{radius:6,color:ink,fillColor:"transparent",fillOpacity:0,weight:2}).addTo(m).bindTooltip("布列斯特");
+    L.circleMarker(pts[pts.length-1],{radius:8,color:ring,fillColor:here,fillOpacity:1,weight:3}).addTo(m).bindPopup("<b>NUR-SULTAN</b><br>2026-09-14 14:42 · 距布列斯特 3928 km").openPopup();
+  }
+  function mk(id,build){
+    try{var m=L.map(id,{attributionControl:true}).setView([46,80],4);m.attributionControl.setPrefix("");build(m);route(m);}
+    catch(e){console.log("ERR "+id+" "+e.stack);var d=document.createElement("div");d.className="err";d.textContent=e.message;document.getElementById(id).parentNode.appendChild(d);}
+  }
+  mk("a",function(m){L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:18,attribution:"© OpenStreetMap"}).addTo(m)});
+  mk("b",function(m){
+    L.tileLayer(ESRI+"Base/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:"Esri, HERE, Garmin, © OpenStreetMap"}).addTo(m);
+    L.tileLayer(ESRI+"Reference/MapServer/tile/{z}/{y}/{x}",{maxZoom:16}).addTo(m);
+  });
+  mk("d",function(m){
+    L.tileLayer("https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=7&x={x}&y={y}&z={z}",{subdomains:"1234",maxZoom:18,attribution:"高德"}).addTo(m);
+  });
+  mk("c",function(m){
+    document.getElementById("c").style.background=dark?"#171916":"#f6f5f1";
+    L.geoJSON(window.WORLD,{style:{color:dark?"#363a33":"#d3cfc3",weight:.7,fillColor:dark?"#22251f":"#e9e6dd",fillOpacity:1},interactive:false}).addTo(m);
+    L.tileLayer(ESRI+"Reference/MapServer/tile/{z}/{y}/{x}",{maxZoom:16,attribution:"Esri"}).addTo(m);
+  });
+})();
+</script></body></html>
