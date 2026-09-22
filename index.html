@@ -83,7 +83,8 @@
   button.copy{padding:2px 9px;font-size:11.5px;border-radius:999px;color:var(--mute);margin-left:-4px;background:transparent}
   button.copy:hover{color:var(--acc)}
   .chip{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--acc-soft);color:var(--ink-2);white-space:nowrap}
-  .chip b{font-weight:600;margin-left:5px;margin-right:1px;font-family:var(--mono)}
+  .st{display:inline-flex;align-items:center;gap:6px}
+  .chip b{font-weight:600;margin-right:2px;font-family:var(--mono)}
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.pick{color:var(--pick)}
   .meta{font:12.5px var(--mono);color:var(--mute);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .spacer{flex:1}
@@ -352,7 +353,10 @@
   // ---- rendering ----
   var list = $("#list");
   var TOUCH = window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
-  function chip(text, cls, days) { return '<span class="chip ' + (cls || "") + '">' + esc(text) + (days != null ? '<b>' + days + '</b> 天' : "") + '</span>'; }
+  function chip(text, cls, days) {
+    return '<span class="st"><span class="chip ' + (cls || "") + '">' + esc(text) + '</span>' +
+      (days != null ? '<span class="chip days"><b>' + days + '</b> 天</span>' : "") + '</span>';
+  }
   function v(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
   function itdidaUrl(n) { return "https://yen.itdida.com/query.xhtml?danHao=" + encodeURIComponent(n); }
 
@@ -490,7 +494,7 @@
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
     var last = parseTime(traces.length ? traces[0].time : null);
     var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
-    $(".chip", head).outerHTML = chip(st[0], st[1], days);
+    $(".st", head).outerHTML = chip(st[0], st[1], days);
 
     var meta = [];
     if (s.source) meta.push(s.source);
@@ -544,13 +548,13 @@
   function renderItdida(el, n, reason) {
     var head = $(".hd", el);
     $(".num", head).outerHTML = '<a class="num" href="' + esc(itdidaUrl(n)) + '" target="_blank" rel="noopener" title="在 itdida 新标签打开,单号已填">' + esc(n) + ' ↗</a>';
-    $(".chip", head).outerHTML = chip("无记录", "");
+    $(".st", head).outerHTML = chip("无记录", "");
     $('[data-role="meta"]', head).textContent = WORKER_URL ? "nextsls、itdida 和 17track 都没有这个单号" : "nextsls 和 itdida 都没有这个单号";
     $('[data-role="body"]', el).innerHTML =
       '<div class="note">' + esc(reason || "") + (reason ? "。" : "") + '单号刚录入时可能要过几小时才有轨迹,也可以点单号去 itdida 页面人工查一次。</div>';
   }
   function renderError(el, n, msg) {
-    $(".chip", $(".hd", el)).outerHTML = chip("失败", "bad");
+    $(".st", $(".hd", el)).outerHTML = chip("失败", "bad");
     $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
   }
 
