@@ -97,6 +97,7 @@
   .now{display:flex;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);background:var(--panel-2);min-width:0}
   .now .txt{font-size:13px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .now .txt b{color:var(--ink);font-weight:600}
+  .now .txt .here{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--here);box-shadow:0 0 0 3px color-mix(in srgb,var(--here) 25%,transparent);margin:0 9px 1px 2px;vertical-align:middle}
   .now .txt .t{font-family:var(--mono);color:var(--acc);font-size:12px;margin-left:4px}
   .chip.days{color:var(--acc)}
   .now .km{margin-left:auto;font:12px var(--mono);color:var(--acc);white-space:nowrap}
@@ -275,7 +276,7 @@
   function itdidaCls(desc) {
     var d = String(desc || "");
     if (/签收|delivered/i.test(d)) return "ok";
-    if (/退|异常|问题|拒收|exception|return/i.test(d)) return "bad";
+    if (/退|异常|问题|拒收|exception|return|延误|晚|推迟|delay/i.test(d)) return "bad";
     if (/收货|揽收|入库|收件/.test(d)) return "pick";
     return "warn";
   }
@@ -566,7 +567,7 @@
     var lTxt = l ? String(l.info) : "";
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?布列斯特\s*\d+\s*km/i, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
-    var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' + (lp ? '现在 <b>' + esc(lp) + '</b>' : '') + (lp && lTxt ? ' · ' : '') + esc(lp ? lTxt : '') +
+    var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' + (lp ? '<i class="here"></i><b>' + esc(lp) + '</b>' : '') + (lp && lTxt ? ' · ' : '') + esc(lp ? lTxt : '') +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' + (lk ? '<span class="km">距布列斯特 ' + lk + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var p = placeOfTrace(t), tm = String(t.time || "");
