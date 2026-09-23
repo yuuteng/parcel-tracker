@@ -142,6 +142,8 @@
     .ev:last-of-type::before{bottom:auto;height:12px}
     .ev.cur .pin{background:var(--here);box-shadow:0 0 0 3px color-mix(in srgb,var(--here) 25%,transparent)}
     .trace.collapsed .ev:nth-child(n+6){display:none}
+    .trace.collapsed .ev:nth-child(5)::before{bottom:auto;height:12px}
+    .controls input{font-size:14px}
     .more{padding:10px}
   }
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -151,7 +153,7 @@
 <div class="top">
   <h1>快递看板</h1><span class="stamp" id="stamp"></span>
   <div class="controls">
-    <input id="input" type="text" placeholder="单号,多个用空格或逗号分开,回车添加" autocomplete="off" spellcheck="false" aria-label="添加单号">
+    <input id="input" type="text" placeholder="输入单号,多个用空格分开" autocomplete="off" spellcheck="false" aria-label="添加单号">
     <button class="pri" id="add">添加</button>
     <button id="refresh">全部刷新</button>
   </div>
