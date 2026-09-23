@@ -129,7 +129,6 @@
     .grip{padding:2px 0}
     .chip{max-width:16em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .now{flex-wrap:wrap;gap:4px 10px;padding:8px 12px}
-    .now .chip{display:none}
     .now .txt{white-space:normal;flex:1 1 100%}
     .now .km{margin-left:0}
     .ev{display:block;position:relative;padding:8px 12px 8px 30px}
@@ -280,6 +279,20 @@
     if (/收货|揽收|入库|收件/.test(d)) return "pick";
     return "warn";
   }
+  function itdidaLabel(desc) {
+    var d = String(desc || "");
+    if (/签收|delivered/i.test(d)) return "已签收";
+    if (/退|拒收|return/i.test(d)) return "退回";
+    if (/异常|问题|exception/i.test(d)) return "异常";
+    if (/延误|晚|推迟|delay/i.test(d)) return "延误";
+    if (/派送|投递|out for/i.test(d)) return "派送中";
+    if (/清关|海关|customs/i.test(d)) return "清关中";
+    if (/开船|发运|离港|装柜|班列|起飞|departed/i.test(d)) return "已发运";
+    if (/转运|中转|操作/.test(d)) return "转运中";
+    if (/收货|揽收|入库|收件/.test(d)) return "已揽收";
+    if (/现站|到达|arriv/i.test(d)) return "运输中";
+    return "运输中";
+  }
   function itdidaShipment(n, item) {
     var tracks = item && Array.isArray(item.trackList) ? item.trackList : [];
     if (!tracks.length) { var e = new Error(item && item.errorMsg || "itdida 无记录"); e.notFound = true; throw e; }
@@ -287,7 +300,7 @@
     var d = item.detail || {};
     return {
       source: "itdida", link: itdidaUrl(n),
-      status: tracks[0].desc || "有轨迹", statusCls: itdidaCls(tracks[0].desc),
+      status: itdidaLabel(tracks[0].desc), statusCls: itdidaCls(tracks[0].desc),
       country: d.guoJia || "", postcode: "", parcel_count: d.numOfUnits || 0,
       outer_carrier_code: item.zhuanDanHao || "",
       traces: tracks.map(function (t) {
@@ -553,7 +566,7 @@
     var lTxt = l ? String(l.info) : "";
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?布列斯特\s*\d+\s*km/i, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
-    var nowHtml = l ? '<div class="now">' + chip(st[0], st[1]) + '<span class="txt">' + (lp ? '现在 <b>' + esc(lp) + '</b>' : '') + (lp && lTxt ? ' · ' : '') + esc(lTxt) +
+    var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' + (lp ? '现在 <b>' + esc(lp) + '</b>' : '') + (lp && lTxt ? ' · ' : '') + esc(lp ? lTxt : '') +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' + (lk ? '<span class="km">距布列斯特 ' + lk + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var p = placeOfTrace(t), tm = String(t.time || "");
