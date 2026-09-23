@@ -6,7 +6,7 @@ A single-page dashboard for parcels riding the China–Europe rail corridor: one
 
 Live: https://yuuteng.github.io/parcel-tracker/
 
-![Screenshot](docs/screenshot.png)
+![Screenshot](docs/screenshot.jpg)
 
 ## Features
 

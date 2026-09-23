@@ -6,7 +6,7 @@
 
 线上地址:https://yuuteng.github.io/parcel-tracker/
 
-![截图](docs/screenshot.png)
+![截图](docs/screenshot.jpg)
 
 ## 功能
 
