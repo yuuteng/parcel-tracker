@@ -512,7 +512,7 @@
 
     var body = $('[data-role="body"]', el);
     var l = traces[0];
-    var nowHtml = l ? '<div class="now">' + chip(st[0], st[1]) + '<span class="txt">' + (placeOfTrace(l) ? '现在 <b>' + esc(placeOfTrace(l)) + '</b> · ' : '') + esc(l.info) +
+    var nowHtml = l ? '<div class="now">' + chip(st[0], st[1]) + '<span class="txt">' + (placeOfTrace(l) ? '现在 <b>' + esc(placeOfTrace(l)) + '</b> · ' : '') + esc(kmOf(l.info) ? String(l.info).replace(/[,，]?\s*距离?布列斯特\s*\d+\s*km/i, '') : l.info) +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' + (kmOf(l.info) ? '<span class="km">距布列斯特 ' + kmOf(l.info) + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var p = placeOfTrace(t);
