@@ -39,7 +39,7 @@
 python3 -m http.server 8000
 ```
 
-打开 http://localhost:8000/,页面直接从浏览器调各家查询接口。
+打开 <http://localhost:8000/>,页面直接从浏览器调各家查询接口。
 
 ## 说明
 
