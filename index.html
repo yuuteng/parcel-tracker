@@ -42,7 +42,11 @@
   .top .stamp{font:12px var(--mono);color:var(--mute)}
   .stamp button{border:none;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
   .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
-  #theme{flex:0 0 auto;font-family:var(--mono);font-size:12px;color:var(--ink-2);padding:8px 10px}
+  #theme{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);padding:7px 8px 7px 10px}
+  #theme .ic{display:none;color:var(--acc)}
+  #theme[data-mode="auto"] .ic-auto,#theme[data-mode="light"] .ic-light,#theme[data-mode="dark"] .ic-dark{display:block}
+  #theme .lbl b{font-weight:600;color:var(--ink)}
+  #theme .arr{color:var(--mute)}
   .controls input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--mono)}
   button{padding:9px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:500 13px var(--sans);cursor:pointer}
   button:hover{border-color:var(--acc)}
@@ -113,18 +117,15 @@
   .ev.cur{color:var(--ink)} .ev.cur .ev-t{color:var(--here);font-weight:600}
   .ev .pin{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--acc);margin-right:8px;vertical-align:middle}
   .ev .pin.none{background:transparent;border:1px solid var(--line-2)}
-  .ev .pin.inf{background:transparent;border:1.5px solid var(--acc)}
-  .now .txt .here.inf{background:transparent;border:2px solid var(--here)}
-  .leaflet-popup-content small.inf{display:block;margin-top:4px;color:var(--mute);font-size:11px}
   .trace.collapsed .ev:nth-child(n+8){display:none}
   .more{display:block;width:100%;border:0;border-top:1px solid var(--line);border-radius:0;background:var(--panel-2);color:var(--acc);font:500 12.5px var(--sans);padding:9px;cursor:pointer}
   .empty{padding:48px 0;text-align:center;color:var(--mute)}
   @media (max-width:760px){
     body{padding-inline:12px;padding-block:12px 32px}
     .top{gap:8px 12px;margin-bottom:10px}
-    .top .stamp{flex:1 1 auto;order:3}
-    #theme{order:4;padding:4px 8px}
-    .controls{margin-left:0;flex-basis:100%;max-width:none}
+    .top .stamp{width:100%;order:3}
+    #theme{order:1;margin-left:auto;padding:5px 6px 5px 8px}
+    .controls{order:2;margin-left:0;flex-basis:100%;max-width:none}
     .mapwrap{height:38vh;min-height:240px}
     .legend{gap:8px;font-size:10.5px;padding:4px 8px}
     .hd{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 8px;padding:10px 12px}
@@ -163,7 +164,13 @@
     <button class="pri" id="add">添加</button>
     <button id="refresh">全部刷新</button>
   </div>
-  <button id="theme" title="深浅色:自动 / 浅 / 深" aria-label="切换深浅色"></button>
+  <button id="theme" title="皮肤:点击在 自动 / 浅色 / 深色 之间切换" aria-label="切换皮肤">
+    <svg class="ic ic-auto" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>
+    <svg class="ic ic-light" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>
+    <svg class="ic ic-dark" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" fill="currentColor"/></svg>
+    <span class="lbl">皮肤 · <b id="theme-name"></b></span>
+    <svg class="arr" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>
+  </button>
 </div>
 <div class="layout">
   <div class="mapwrap"><div id="map"></div>
@@ -468,8 +475,7 @@
       var last = i === sorted.length - 1;
       var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
                                       : { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer);
-      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info) +
-        (p.inferred ? '<small class="inf">站名按「距离' + esc(p.place) + '」推断</small>' : ''), { autoPan: false });
+      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
       if (!last) m.bindTooltip(p.place);
       if (last) r.here = m;
     });
@@ -588,19 +594,22 @@
 
     var body = $('[data-role="body"]', el);
     var l = traces[0], ref = refCityOf(traces);
-    var ll = l ? locOf(l, ref) : null, lp = ll ? ll.place : null, lk = l ? kmOf(l.info) : null;
+    // Place = the newest event that could be located (same point as the map's current dot).
+    var lp = null;
+    for (var li = 0; li < traces.length && !lp; li++) { var loc0 = locOf(traces[li], ref); if (loc0) lp = loc0.place; }
+    var lk = l ? kmOf(l.info) : null;
     var lTxt = l ? String(l.info) : "";
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?\s*[^\s，,。\d]{2,12}?\s*\d+\s*km/i, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
     var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' +
-      (lp ? '<i class="here' + (ll.inferred ? ' inf' : '') + '"></i><b' + (ll.inferred ? ' title="站名按「距离' + esc(lp) + '」推断"' : '') + '>' + esc(lp) + '</b>' : '') +
+      (lp ? '<i class="here"></i><b>' + esc(lp) + '</b>' : '') +
       (lp && lTxt ? ' · ' : '') + esc(lTxt) +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' +
       (lk ? '<span class="km">距' + esc(lk.ref) + ' ' + lk.km + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var loc = locOf(t, ref), p = loc ? loc.place : null, tm = String(t.time || "");
       return '<div class="ev' + (i === 0 ? ' cur' : '') + '"><span class="ev-t"><span class="ev-y">' + esc(tm.slice(0, 5)) + '</span>' + esc(tm.slice(5, 16)) + '</span>' +
-        '<span class="ev-x"><i class="pin' + (p ? (loc.inferred ? " inf" : "") : " none") + '" title="' + esc(p ? (loc.inferred ? "推断:" + p : p) : "无法定位") + '"></i>' + esc(t.info) + '</span></div>';
+        '<span class="ev-x"><i class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></i>' + esc(t.info) + '</span></div>';
     }).join("");
     var LIMIT = 6;
     var more = traces.length > LIMIT ? '<button type="button" class="more" data-role="more">展开全部 ' + traces.length + ' 条</button>' : '';
@@ -753,7 +762,7 @@
   function applyTheme(t) {
     if (t === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", t);
     try { if (t === "auto") localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t); } catch (e) {}
-    $("#theme").textContent = THEME_LABEL[t];
+    $("#theme").setAttribute("data-mode", t); $("#theme-name").textContent = THEME_LABEL[t];
     Object.keys(routes).forEach(paintRoute);
   }
   $("#theme").addEventListener("click", function () { applyTheme(THEMES[(THEMES.indexOf(themeNow()) + 1) % THEMES.length]); });
