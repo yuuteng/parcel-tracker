@@ -199,7 +199,7 @@
   var KNOWN = {
     "深圳": [22.5446, 114.0546], "深圳总部": [22.5446, 114.0546], "重庆": [29.5630, 106.5516], "江油": [31.9525, 104.9347],
     "玉门东": [39.8152, 97.9201], "鄯善": [42.2914, 90.6423], "阿拉山口": [45.3632, 82.4341],
-    "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [54.7751, 69.0978],
+    "多斯特克": [45.2527, 82.4864], "DOSTYK": [45.2527, 82.4864], "BESKOL": [46.1726, 81.0969],
     "BALKHASH": [46.8450, 74.9727], "NUR-SULTAN": [51.1160, 71.4677], "ASTANA": [51.1160, 71.4677], "KUSHMURUN": [52.4518, 64.6152],
     "布列斯特": [52.0938, 23.6852], "BREST": [52.0938, 23.6852], "MALASZEWICZE": [52.1960, 23.4310],
     "DUISBURG": [51.4344, 6.7623], "杜伊斯堡": [51.4344, 6.7623], "HAMBURG": [53.5511, 9.9937],
@@ -333,6 +333,8 @@
     if (m) return clean(m[1]);
     m = info.match(/^(\S+?)(集散中心|仓|中心)/);
     if (m) return clean(m[1]);
+    m = info.match(/,\s*([A-Za-zÀ-ÿ' -]{2,40}?)\s*,\s*([A-Z]{2})\s*$/);
+    if (m) return m[1].trim() + ", " + m[2];
     if (SKIP.test(info)) return null;
     if (/^[一-龥]{2,6}$/.test(info.trim())) return info.trim();
     m = info.match(/^([A-Za-z][A-Za-z .'-]{2,})\s*(,|$)/);
@@ -349,7 +351,7 @@
   }
   function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
   // "距离布列斯特 1245 km" counts down to the rail terminus; an arrival event
-  // without a station name is placed there and flagged as inferred.
+  // without a station name is placed there.
   var ARRIVE = /到站|到达|抵达/;
   function refCityOf(traces) {
     for (var i = 0; i < traces.length; i++) { var k = kmOf(traces[i].info); if (k && k.ref) return k.ref; }
@@ -367,7 +369,7 @@
 
   // ---- geocoding with a serial queue, 1.1 s apart, cached ----
   var geoCache = read(GEO_KEY, {});
-  var queue = [], busy = false;
+  var queue = [], busy = false, inflight = {};
   var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
   // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
   // stations come from KNOWN without a network call.
@@ -378,7 +380,9 @@
     var c = geoCache[key];
     if (c && c.ll) return Promise.resolve(c);
     if (c && c.miss && Date.now() - c.miss < MISS_TTL) return Promise.resolve(null);
-    return new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); });
+    if (inflight[key]) return inflight[key];
+    return inflight[key] = new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); })
+      .then(function (r) { delete inflight[key]; return r; });
   }
   function geocode(name) { return lookup(name).then(function (r) { return r ? r.ll : null; }); }
   function pump() {
@@ -386,7 +390,7 @@
     busy = true;
     var job = queue.shift();
     nominatim(job.name)
-      .then(function (r) { return r || wikipedia(job.name); })
+      .then(function (r) { return r || (/,\s*[A-Z]{2}$/.test(job.name) ? null : wikipedia(job.name)); })
       .catch(function () { return null; })
       .then(function (r) {
         geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); job.res(r);
@@ -394,12 +398,23 @@
       });
   }
   function nominatim(name) {
-    return fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&accept-language=en&q=" + encodeURIComponent(name), { cache: "force-cache" })
+    var cc = name.match(/^(.+?),\s*([A-Z]{2})$/), q = cc ? cc[1] : name;
+    var extra = cc ? "&limit=5&countrycodes=" + cc[2].toLowerCase() : "&limit=1";
+    return fetch("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&accept-language=en" + extra + "&q=" + encodeURIComponent(q), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
       .then(function (a) {
         var hit = a && a[0], ad = hit && hit.address || {};
-        return hit ? { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null } : null;
+        if (!hit) return null;
+        var r = { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null };
+        if (a.length > 1) r.alts = a.map(function (h) { return [parseFloat(h.lat), parseFloat(h.lon)]; });
+        return r;
       });
+  }
+  // Same-name towns ("St Ouen, FR" has five): take the one nearest the destination.
+  function nearest(alts, to) {
+    var best = null, bd = Infinity, k = Math.cos(to[0] * Math.PI / 180);
+    alts.forEach(function (a) { var d = Math.pow(a[0] - to[0], 2) + Math.pow((a[1] - to[1]) * k, 2); if (d < bd) { bd = d; best = a; } });
+    return best;
   }
   // Wikipedia resolves spellings OSM only has under the local name
   // (Kushmurun → Qusmuryn): exact title following redirects, then full-text
@@ -465,6 +480,7 @@
     var dim = sel != null && sel !== n, op = dim ? .35 : 1;
     var acc = v("--acc"), here = v("--here"), ring = v("--panel");
     r.layer.clearLayers();
+    if (r.dest) r.pts.forEach(function (p) { if (p.alts) p.ll = nearest(p.alts, r.dest); });
     var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
     sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
     var line = sorted.map(function (p) { return p.ll; });
@@ -513,7 +529,7 @@
     ordered.forEach(function (t, i) {
       var loc = locOf(t, ref); if (!loc) return;
       r.total++; r.pending++;
-      geocode(loc.place).then(function (ll) { if (ll) r.pts.push({ i: i, ll: ll, t: t, place: loc.place, inferred: loc.inferred }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
+      lookup(loc.place).then(function (g) { if (g) r.pts.push({ i: i, ll: g.ll, alts: g.alts, t: t, place: loc.place }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
     });
     r.destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
     if (r.destName) { r.pending++; geocode(r.destName).then(function (ll) { r.dest = ll; }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
@@ -600,6 +616,7 @@
     var lk = l ? kmOf(l.info) : null;
     var lTxt = l ? String(l.info) : "";
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?\s*[^\s，,。\d]{2,12}?\s*\d+\s*km/i, "");
+    if (lp && /,\s*[A-Z]{2}$/.test(lp)) lTxt = lTxt.replace(/\s*,\s*[^,]+,\s*[A-Z]{2}\s*$/, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
     var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' +
       (lp ? '<i class="here"></i><b>' + esc(lp) + '</b>' : '') +
