@@ -78,6 +78,8 @@
   .cards{display:flex;flex-direction:column;gap:12px;min-width:0}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;transition:border-color .15s;min-width:0}
   .card.sel{border-color:var(--acc)}
+  .card.arch{opacity:.6}
+  .card.arch.sel{opacity:.85}
   .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.6);position:relative;z-index:5}
   .card{cursor:pointer}
   .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:11px 14px}
@@ -189,6 +191,8 @@
   var KEY = "parcel-tracker.numbers.v1";
   var GEO_KEY = "parcel-tracker.geo.v3";
   var HIDE_KEY = "parcel-tracker.hidden.v1";
+  var DELIVERED_KEY = "parcel-tracker.delivered.v1";
+  var ARCHIVE_DAYS = 5;
   var ORDER_KEY = "parcel-tracker.order.v1";
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
@@ -236,6 +240,9 @@
   var numbers = fromHash() || read(KEY, null) || [];
   var hidden = read(HIDE_KEY, []);
   var order = read(ORDER_KEY, []);
+  // number → delivery time (ms); parcels delivered over ARCHIVE_DAYS ago are archived and not fetched
+  var delivered = read(DELIVERED_KEY, {}), showArchived = false;
+  function isArchived(n) { return !!delivered[n] && Date.now() - delivered[n] > ARCHIVE_DAYS * 86400000; }
   function persist() {
     store(KEY, numbers);
     history.replaceState(null, "", location.pathname + location.search + (numbers.length ? "#n=" + encodeURIComponent(numbers.join(",")) : ""));
@@ -603,6 +610,11 @@
     var last = parseTime(traces.length ? traces[0].time : null);
     var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
     $(".st", head).outerHTML = chip(st[0], st[1], days);
+    var isDel = s.status === "delivered" || st[0] === "已签收";
+    if (isDel && last) delivered[n] = last.getTime(); else delete delivered[n];
+    store(DELIVERED_KEY, delivered);
+    el.classList.toggle("arch", isArchived(n));
+    if (isArchived(n) && !showArchived) { archiveNow(el, n); return; }
 
     var meta = [];
     if (s.source) meta.push(s.source);
@@ -678,14 +690,28 @@
     $('[data-role="body"]', el).innerHTML = '<div class="note">读取失败:' + esc(msg) + '。点"全部刷新"重试。</div>';
   }
 
-  function allNumbers() {
+  function eligible() {
     var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; });
     var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0; });
-    var all = mine.concat(pub);
-    if (!order.length) return all;
-    var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
-    var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
-    return fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
+    return mine.concat(pub);
+  }
+  function allNumbers() {
+    var all = eligible();
+    var arch = all.filter(isArchived);
+    all = all.filter(function (n) { return !isArchived(n); });
+    if (order.length) {
+      var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
+      var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
+      all = fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
+    }
+    return showArchived ? all.concat(arch) : all;
+  }
+  // A card found to be past the archive window while loading leaves the list right away.
+  function archiveNow(el, n) {
+    el.remove(); dropRoute(n);
+    if (sel === n) { var c = $(".card", list); sel = null; if (c) select(c.dataset.n); }
+    if (!$(".card", list)) showEmpty();
+    stamp();
   }
   function saveOrder() {
     order = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
@@ -733,7 +759,11 @@
       .then(function (s) { renderShipment(el, n, s); })
       .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
   }
-  function showEmpty() { list.innerHTML = '<div class="empty">还没有单号。在上面输入一个,回车。</div>'; }
+  function showEmpty() {
+    list.innerHTML = eligible().length && !showArchived
+      ? '<div class="empty">单号都已签收满 ' + ARCHIVE_DAYS + ' 天并归档,点上方「显示」查看。</div>'
+      : '<div class="empty">还没有单号。在上面输入一个,回车。</div>';
+  }
   function render() {
     list.innerHTML = "";
     Object.keys(routes).forEach(dropRoute);
@@ -755,11 +785,15 @@
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
     var hid = hidden.filter(function (n) { return shared.indexOf(n) >= 0; }).length;
-    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; }).length, pub = shared.length - hid;
+    var arch = eligible().filter(isArchived);
+    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
+    var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
     $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) +
       " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") +
-      (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "");
+      (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "") +
+      (arch.length ? ' · <span title="签收满 ' + ARCHIVE_DAYS + ' 天自动归档">已归档 ' + arch.length + ' 个</span> <button type="button" id="arch">' + (showArchived ? "收起" : "显示") + '</button>' : "");
     var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; store(HIDE_KEY, hidden); render(); });
+    var a = $("#arch"); if (a) a.addEventListener("click", function () { showArchived = !showArchived; render(); });
   }
 
   function add() {
