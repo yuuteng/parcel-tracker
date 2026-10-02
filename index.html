@@ -410,6 +410,11 @@
         return r;
       });
   }
+  // "SURESNES, FR" and "Saint-Ouen" → comparable keys, so an event in the destination town shares its point.
+  function townKey(s) {
+    return String(s || "").replace(/,\s*[A-Z]{2}$/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase().replace(/\bst\b\.?/g, "saint").replace(/[^a-z0-9]/g, "");
+  }
   // Same-name towns ("St Ouen, FR" has five): take the one nearest the destination.
   function nearest(alts, to) {
     var best = null, bd = Infinity, k = Math.cos(to[0] * Math.PI / 180);
@@ -480,7 +485,10 @@
     var dim = sel != null && sel !== n, op = dim ? .35 : 1;
     var acc = v("--acc"), here = v("--here"), ring = v("--panel");
     r.layer.clearLayers();
-    if (r.dest) r.pts.forEach(function (p) { if (p.alts) p.ll = nearest(p.alts, r.dest); });
+    if (r.dest) r.pts.forEach(function (p) {
+      if (r.destTown && townKey(p.place) === townKey(r.destTown)) p.ll = r.dest;
+      else if (p.alts) p.ll = nearest(p.alts, r.dest);
+    });
     var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
     sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
     var line = sorted.map(function (p) { return p.ll; });
@@ -532,7 +540,7 @@
       lookup(loc.place).then(function (g) { if (g) r.pts.push({ i: i, ll: g.ll, alts: g.alts, t: t, place: loc.place }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
     });
     r.destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
-    if (r.destName) { r.pending++; geocode(r.destName).then(function (ll) { r.dest = ll; }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
+    if (r.destName) { r.pending++; lookup(r.destName).then(function (g) { if (g) { r.dest = g.ll; r.destTown = g.town; } }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
     if (!r.pending) schedule();
   }
   function dropRoute(n) { if (routes[n]) { map.removeLayer(routes[n].layer); delete routes[n]; geoStatus(); } }
