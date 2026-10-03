@@ -608,9 +608,9 @@
 
     var first = parseTime(traces.length ? traces[traces.length - 1].time : null);
     var last = parseTime(traces.length ? traces[0].time : null);
-    var days = first ? daysBetween(first, s.status === "delivered" && last ? last : new Date()) : null;
-    $(".st", head).outerHTML = chip(st[0], st[1], days);
     var isDel = s.status === "delivered" || st[0] === "已签收";
+    var days = first ? daysBetween(first, isDel && last ? last : new Date()) : null;
+    $(".st", head).outerHTML = chip(st[0], st[1], days);
     if (isDel && last) delivered[n] = last.getTime(); else delete delivered[n];
     store(DELIVERED_KEY, delivered);
     el.classList.toggle("arch", isArchived(n));
