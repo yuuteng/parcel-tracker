@@ -542,20 +542,23 @@
       if (last) r.here = m;
     });
     if (shipLL) {
-      var sea = (line.length ? [line[line.length - 1]] : []).concat((sh.track || []).map(function (t) { return [t[0], t[1]]; }), [shipLL]);
+      var past = sh.path && sh.path.length ? sh.path : (sh.track || []).map(function (t) { return [t[0], t[1]]; });
+      var sea = (line.length ? [line[line.length - 1]] : []).concat(past, [shipLL]);
       L.polyline(sea, { color: acc, weight: dim ? 1.5 : 2, opacity: op * .8 }).addTo(r.layer);
       if (sh.approx) L.circle(shipLL, { radius: 60000, color: here, weight: 1, dashArray: "3 5", fillColor: here, fillOpacity: .06 * op, opacity: op * .7 }).addTo(r.layer);
       var icon = L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
         html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' });
       var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
-      sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + (sh.approx ? ' · 大致位置' : '') + '</span>' +
+      sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
         esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : ""].filter(Boolean).join(" · ")) +
         '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', { autoPan: false });
       r.here = sm;
       bounds.extend(shipLL);
+      if (sh.ahead && sh.ahead.length) L.polyline([shipLL].concat(sh.ahead), { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
     }
     if (r.dest) {
-      if (line.length || shipLL) L.polyline([shipLL || line[line.length - 1], r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
+      var from = shipLL ? (sh.ahead && sh.ahead.length ? sh.ahead[sh.ahead.length - 1] : shipLL) : line[line.length - 1];
+      if (from) L.polyline([from, r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
       L.circleMarker(r.dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地 " + (r.destName || ""));
       bounds.extend(r.dest);
     }
@@ -717,7 +720,6 @@
     if (has && v.sog != null) bits.push(v.sog + " 节");
     if (has && v.dest && !/FOR ORDERS/i.test(v.dest)) bits.push("开往 " + v.dest);
     if (has && v.eta) bits.push("预计 " + fmtUtc(v.eta).slice(0, 5) + " 到港");
-    if (has && v.approx) bits.push("大致位置");
     var html = '<div class="now"><span class="txt"><i class="here ship"></i><b>' + esc(v && v.name || name) + '</b>' +
       (bits.length ? ' · ' + esc(bits.join(" · ")) : (has ? '' : ' · 暂无船位')) +
       (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
