@@ -280,11 +280,20 @@
   persist();
 
   // ---- nextsls ----
+  // Upstream PHP sometimes prints warnings before the JSON body.
+  function looseJson(r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); } catch (e) {}
+      var i = t.search(/[{[]/);
+      if (i < 0) throw new Error("返回内容不是 JSON");
+      return JSON.parse(t.slice(i));
+    });
+  }
   function fetchShipment(n) {
     var url = "https://tracking.nextsls.com/rest/trace/tracking/lists?app=" + encodeURIComponent(APP) + "&number=" + encodeURIComponent(n);
     return fetch(url, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
+      return looseJson(r);
     }).then(function (j) {
       var s = j && j.data && j.data.shipment;
       if (!s) { var e = new Error(j && j.info ? j.info : "无记录"); e.notFound = true; throw e; }
@@ -310,7 +319,7 @@
     function call() {
       return fetch(url, { cache: "no-store" }).then(function (r) {
         if (!r.ok) throw new Error("itdida HTTP " + r.status);
-        return r.json();
+        return looseJson(r);
       });
     }
     call().catch(function () { return new Promise(function (res) { setTimeout(res, 2000); }).then(call); })
