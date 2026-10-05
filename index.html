@@ -108,6 +108,9 @@
   .now .txt .here{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--here);box-shadow:0 0 0 3px color-mix(in srgb,var(--here) 25%,transparent);margin:0 9px 1px 2px;vertical-align:middle}
   .now .txt .t{font-family:var(--mono);color:var(--acc);font-size:12px;margin-left:4px}
   .chip.days{color:var(--acc)}
+  .ship-ic{background:none;border:none}
+  .now .txt .here.ship{border-radius:2px;transform:rotate(45deg)}
+  a.km{text-decoration:none}
   .now .km{margin-left:auto;font:12px var(--mono);color:var(--acc);white-space:nowrap}
   .note{padding:12px 14px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
   .note b{color:var(--ink);font-weight:500}
@@ -228,6 +231,33 @@
   // ---- shared numbers come from numbers.json in the repo; personal ones from
   // the URL hash, then localStorage ----
   var shared = [];
+  // Vessel positions collected every 2 h by .github/workflows/ships.yml.
+  var SHIPS_URL = "https://raw.githubusercontent.com/yuuteng/parcel-tracker/ship-data/ships.json";
+  var shipsP = null;
+  function loadShips() {
+    shipsP = fetch(SHIPS_URL, { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        var by = {};
+        Object.keys(j && j.vessels || {}).forEach(function (k) { var v = j.vessels[k]; by[String(v.name).toUpperCase()] = v; });
+        return by;
+      }).catch(function () { return {}; });
+    return shipsP;
+  }
+  // "船名船次:CMA CGM CALLISTO 0R11EW1MA" → vessel name, while the parcel is still at sea.
+  var VESSEL_RE = /(?:船名(?:船次|航次)?|vessel(?:\s*name)?)\s*[:：]\s*([A-Za-z0-9 .'-]+)/i;
+  var LANDED_RE = /到港|抵港|靠港|卸船|卸柜|提柜|清关|派送|签收|arrived at port|discharg|delivered/i;
+  function vesselOf(traces, isDel) {
+    if (isDel) return null;
+    for (var i = 0; i < traces.length; i++) {
+      var m = String(traces[i].info || "").match(VESSEL_RE);
+      if (!m) continue;
+      var toks = m[1].trim().split(/\s+/);
+      while (toks.length > 1 && /\d/.test(toks[toks.length - 1])) toks.pop();
+      for (var j = 0; j < i; j++) if (LANDED_RE.test(traces[j].info || "")) return null;
+      return toks.join(" ").toUpperCase();
+    }
+    return null;
+  }
   function loadShared() {
     return fetch("numbers.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) { shared = (j && j.shared || []).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean); })
@@ -353,7 +383,7 @@
   function normPlace(p) {
     if (!p) return null;
     p = String(p).trim().replace(/[\s,，]*\d{5,}\s*$/, "").replace(/[\s,，]+$/, "").trim();
-    if (!p || /^[A-Z]{2,3}$/.test(p)) return null;
+    if (!p || /^[A-Z]{2,3}$/.test(p) || /^[\d\s.-]+$/.test(p)) return null;
     return p;
   }
   function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
@@ -502,16 +532,30 @@
     if (!line.length && !r.dest) { r.bounds = null; return; }
     var bounds = L.latLngBounds(line.length ? line : [r.dest]);
     if (line.length > 1) L.polyline(line, { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
+    var sh = r.ship, shipLL = sh ? [sh.lat, sh.lon] : null;
     sorted.forEach(function (p, i) {
-      var last = i === sorted.length - 1;
+      var last = i === sorted.length - 1 && !shipLL;
       var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
                                       : { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer);
       m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
       if (!last) m.bindTooltip(p.place);
       if (last) r.here = m;
     });
+    if (shipLL) {
+      var sea = (line.length ? [line[line.length - 1]] : []).concat((sh.track || []).map(function (t) { return [t[0], t[1]]; }), [shipLL]);
+      L.polyline(sea, { color: acc, weight: dim ? 1.5 : 2, opacity: op * .8 }).addTo(r.layer);
+      if (sh.approx) L.circle(shipLL, { radius: 60000, color: here, weight: 1, dashArray: "3 5", fillColor: here, fillOpacity: .06 * op, opacity: op * .7 }).addTo(r.layer);
+      var icon = L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
+        html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' });
+      var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
+      sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + (sh.approx ? ' · 大致位置' : '') + '</span>' +
+        esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : ""].filter(Boolean).join(" · ")) +
+        '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', { autoPan: false });
+      r.here = sm;
+      bounds.extend(shipLL);
+    }
     if (r.dest) {
-      if (line.length) L.polyline([line[line.length - 1], r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
+      if (line.length || shipLL) L.polyline([shipLL || line[line.length - 1], r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
       L.circleMarker(r.dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地 " + (r.destName || ""));
       bounds.extend(r.dest);
     }
@@ -658,6 +702,28 @@
       moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
     });
     buildRoute(n, s, traces);
+    var vessel = vesselOf(traces, isDel);
+    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel, by[vessel]); });
+  }
+  function fmtUtc(t) {
+    var d = t ? new Date(t) : null, p = function (x) { return (x < 10 ? "0" : "") + x; };
+    return d && !isNaN(d) ? p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) : "";
+  }
+  function applyShip(el, n, name, v) {
+    var body = $('[data-role="body"]', el), old = $(".now", body);
+    var has = v && v.lat != null;
+    var link = v && v.link || "https://www.vesselfinder.com/vessels?name=" + encodeURIComponent(name);
+    var bits = [];
+    if (has && v.sog != null) bits.push(v.sog + " 节");
+    if (has && v.dest && !/FOR ORDERS/i.test(v.dest)) bits.push("开往 " + v.dest);
+    if (has && v.eta) bits.push("预计 " + fmtUtc(v.eta).slice(0, 5) + " 到港");
+    if (has && v.approx) bits.push("大致位置");
+    var html = '<div class="now"><span class="txt"><i class="here ship"></i><b>' + esc(v && v.name || name) + '</b>' +
+      (bits.length ? ' · ' + esc(bits.join(" · ")) : (has ? '' : ' · 暂无船位')) +
+      (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
+      '<a class="km" href="' + esc(link) + '" target="_blank" rel="noopener">船位 ↗</a></div>';
+    if (old) old.outerHTML = html; else body.insertAdjacentHTML("afterbegin", html);
+    if (has && routes[n]) { routes[n].ship = v; paintRoute(n); if (sel === n) focusRoute(n, false); }
   }
 
   // ---- 17TRACK via the Worker: anything the two forwarders do not know ----
@@ -810,7 +876,7 @@
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
-  $("#refresh").addEventListener("click", function () { loadShared().then(render); });
+  $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(render); });
   window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
   window.addEventListener("resize", function () { map.invalidateSize(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
@@ -827,6 +893,7 @@
   $("#theme").addEventListener("click", function () { applyTheme(THEMES[(THEMES.indexOf(themeNow()) + 1) % THEMES.length]); });
   applyTheme(themeNow());
 
+  loadShips();
   loadShared().then(render);
 })();
 </script>
