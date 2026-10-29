@@ -18,7 +18,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
-LISTEN_S = 60
+LISTEN_S = 240  # moored ships report every 3 min; 60 s missed them
 TRACK_MAX = 300
 STALE_EXACT_S = 6 * 3600
 IN_PORT_KM = 100
@@ -158,13 +158,21 @@ def main(vessels_path, out_path):
             pos = {"lat": vf["lat"], "lon": vf["lon"], "time": vf.get("time"), "approx": True, "source": "vesselfinder"}
         else:
             pos = {k: old.get(k) for k in ("lat", "lon", "time", "approx", "source")} if old.get("lat") is not None else None
+        # VesselFinder's public page rounds to whole degrees, which can put a moored
+        # ship 10 km out at sea; snap a stopped ship near its destination port onto the port.
+        port = port_of(vf.get("dest") or old.get("dest"))
+        in_port = False
+        if pos and port and (first(pos.get("sog"), vf.get("sog")) or 0) < 0.5 and km([pos["lat"], pos["lon"]], port) < IN_PORT_KM:
+            in_port = True
+            if pos.get("approx"):
+                pos = dict(pos, lat=port[0], lon=port[1], approx=False, source="port")
         rec = {"name": vf.get("name") or name, "mmsi": mmsi, "imo": imo,
                "sog": first((pos or {}).get("sog"), vf.get("sog")),
                "cog": first((pos or {}).get("cog"), vf.get("cog")),
                "dest": vf.get("dest") or old.get("dest"), "eta": vf.get("eta") or old.get("eta"),
                "lastPort": vf.get("lastPort") or old.get("lastPort"),
                "link": f"https://www.vesselfinder.com/vessels/details/{imo}",
-               "exact": exact, "track": old.get("track", [])}
+               "exact": exact, "track": old.get("track", []), "inPort": in_port}
         if pos:
             rec.update(lat=pos["lat"], lon=pos["lon"], time=pos["time"], approx=pos["approx"], source=pos["source"])
             pt = [pos["lat"], pos["lon"], pos["time"], 1 if pos["approx"] else 0]
@@ -173,7 +181,7 @@ def main(vessels_path, out_path):
         if rec.get("lat") is not None:
             fixes_ll = [[t[0], t[1]] for t in rec["track"]]
             rec["path"] = sea(([v["from"]] if v.get("from") else []) + fixes_ll)
-            here, port = [rec["lat"], rec["lon"]], port_of(rec["dest"])
+            here = [rec["lat"], rec["lon"]]
             if port:
                 rec["ahead"] = [] if km(here, port) < IN_PORT_KM else sea([here, port])
             else:

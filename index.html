@@ -559,7 +559,7 @@
         html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' });
       var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
       sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
-        esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : ""].filter(Boolean).join(" · ")) +
+        esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : ""), sh.approx ? "位置约 ±60 km（公开 AIS 只给整度）" : ""].filter(Boolean).join(" · ")) +
         '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', { autoPan: false });
       r.here = sm;
       bounds.extend(shipLL);
@@ -728,8 +728,11 @@
     var link = v && v.link || "https://www.vesselfinder.com/vessels?name=" + encodeURIComponent(name);
     var bits = [];
     if (has && v.sog != null) bits.push(v.sog + " 节");
-    if (has && v.dest && !/FOR ORDERS/i.test(v.dest)) bits.push("开往 " + v.dest);
-    if (has && v.eta) bits.push("预计 " + fmtUtc(v.eta).slice(0, 5) + " 到港");
+    if (has && v.inPort) bits.push("已到港 " + (v.dest || ""));
+    else {
+      if (has && v.dest && !/FOR ORDERS/i.test(v.dest)) bits.push("开往 " + v.dest);
+      if (has && v.eta) bits.push("预计 " + fmtUtc(v.eta).slice(0, 5) + " 到港");
+    }
     var html = '<div class="now"><span class="txt"><i class="here ship"></i><b>' + esc(v && v.name || name) + '</b>' +
       (bits.length ? ' · ' + esc(bits.join(" · ")) : (has ? '' : ' · 暂无船位')) +
       (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
