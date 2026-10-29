@@ -626,7 +626,7 @@
       '<div class="hd-m">' + chip("查询中", "") + '<span class="meta" data-role="meta"></span></div>' +
       '<div class="hd-r">' + (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
-      '</div><div data-role="body"><div class="note">正在读取 nextsls…</div></div>';
+      '</div><div data-role="body"><div class="note">正在查询…</div></div>';
     $(".del", el).addEventListener("click", function (e) {
       e.stopPropagation();
       if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
@@ -826,12 +826,10 @@
     fetchShipment(n)
       .catch(function (e) {
         if (!e.notFound) throw e;
-        $('[data-role="body"] .note', el).textContent = "nextsls 无记录,正在读取 itdida…";
         return fetchItdida(n);
       })
       .catch(function (e) {
         if (!e.notFound || !WORKER_URL) throw e;
-        $('[data-role="body"] .note', el).textContent = "itdida 无记录,正在读取 17track…";
         return fetchWorker(n);
       })
       .then(function (s) { renderShipment(el, n, s); })
