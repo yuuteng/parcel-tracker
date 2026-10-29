@@ -554,12 +554,11 @@
       var past = sh.path && sh.path.length ? sh.path : (sh.track || []).map(function (t) { return [t[0], t[1]]; });
       var sea = (line.length ? [line[line.length - 1]] : []).concat(past, [shipLL]);
       L.polyline(sea, { color: acc, weight: dim ? 1.5 : 2, opacity: op * .8 }).addTo(r.layer);
-      if (sh.approx) L.circle(shipLL, { radius: 60000, color: here, weight: 1, dashArray: "3 5", fillColor: here, fillOpacity: .06 * op, opacity: op * .7 }).addTo(r.layer);
       var icon = L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
         html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' });
       var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
       sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
-        esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : ""), sh.approx ? "位置约 ±60 km（公开 AIS 只给整度）" : ""].filter(Boolean).join(" · ")) +
+        esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : "")].filter(Boolean).join(" · ")) +
         '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', { autoPan: false });
       r.here = sm;
       bounds.extend(shipLL);
