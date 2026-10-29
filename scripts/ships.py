@@ -4,7 +4,8 @@
 aisstream.io gives exact fixes near its shore receivers; VesselFinder's public
 pages give whole-degree positions at sea plus speed, course, destination, ETA.
 searoute turns the fixes into a path along shipping lanes: `path` from the
-vessel's `from` port through every fix, `ahead` from the latest fix to `toward`.
+vessel's `from` port through every fix, `ahead` from the latest fix to the port in
+its AIS destination (or to `toward` when that port is unknown), empty once in port.
 Usage: AISSTREAM_KEY=... scripts/ships.py vessels.json ships.json
 """
 import asyncio
@@ -20,6 +21,19 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTM
 LISTEN_S = 60
 TRACK_MAX = 300
 STALE_EXACT_S = 6 * 3600
+IN_PORT_KM = 100
+PORTS = {
+    "NLRTM": [51.95, 4.05], "BEANR": [51.28, 4.33], "DEHAM": [53.54, 9.93], "DEBRV": [53.57, 8.55],
+    "DEWVN": [53.59, 8.15], "FRLEH": [49.47, 0.17], "FRDKK": [51.03, 2.21], "FRMRS": [43.33, 5.33],
+    "FRFOS": [43.42, 4.87], "GBFXT": [51.95, 1.33], "GBSOU": [50.90, -1.42], "GBLGP": [51.50, 0.47],
+    "ESALG": [36.13, -5.43], "ESVLC": [39.44, -0.32], "ESBCN": [41.35, 2.16], "ITGOA": [44.40, 8.92],
+    "ITSPE": [44.10, 9.84], "PLGDN": [54.40, 18.66], "GRPIR": [37.94, 23.62], "MAPTM": [35.89, -5.50],
+}
+PORT_NAMES = {"ROTTERDAM": "NLRTM", "ANTWERP": "BEANR", "HAMBURG": "DEHAM", "BREMERHAVEN": "DEBRV",
+              "WILHELMSHAVEN": "DEWVN", "LE HAVRE": "FRLEH", "DUNKERQUE": "FRDKK", "DUNKIRK": "FRDKK",
+              "MARSEILLE": "FRMRS", "FOS": "FRFOS", "FELIXSTOWE": "GBFXT", "SOUTHAMPTON": "GBSOU",
+              "LONDON GATEWAY": "GBLGP", "ALGECIRAS": "ESALG", "VALENCIA": "ESVLC", "BARCELONA": "ESBCN",
+              "GENOA": "ITGOA", "LA SPEZIA": "ITSPE", "GDANSK": "PLGDN", "PIRAEUS": "GRPIR", "TANGER": "MAPTM"}
 
 
 def iso(ts):
@@ -45,6 +59,25 @@ def sea(points):
         pts = [[round(c[1], 3), round(c[0], 3)] for c in seg]
         out.extend(pts[1:] if out else pts)
     return out
+
+
+def port_of(dest):
+    """[lat, lon] of the port named by an AIS destination such as 'NLRTM' or 'ROTTERDAM'."""
+    d = re.sub(r"[^A-Z ]", " ", (dest or "").upper())
+    for code in reversed(re.findall(r"[A-Z]{5}", d.replace(" ", "")) + d.split()):
+        if code in PORTS:
+            return PORTS[code]
+    for name, code in PORT_NAMES.items():
+        if name in d:
+            return PORTS[code]
+    return None
+
+
+def km(a, b):
+    from math import radians, sin, cos, asin, sqrt
+    la1, lo1, la2, lo2 = map(radians, (a[0], a[1], b[0], b[1]))
+    h = sin((la2 - la1) / 2) ** 2 + cos(la1) * cos(la2) * sin((lo2 - lo1) / 2) ** 2
+    return 6371 * 2 * asin(sqrt(h))
 
 
 def first(*vals):
@@ -140,7 +173,13 @@ def main(vessels_path, out_path):
         if rec.get("lat") is not None:
             fixes_ll = [[t[0], t[1]] for t in rec["track"]]
             rec["path"] = sea(([v["from"]] if v.get("from") else []) + fixes_ll)
-            rec["ahead"] = sea([[rec["lat"], rec["lon"]], v["toward"]]) if v.get("toward") else []
+            here, port = [rec["lat"], rec["lon"]], port_of(rec["dest"])
+            if port:
+                rec["ahead"] = [] if km(here, port) < IN_PORT_KM else sea([here, port])
+            else:
+                rec["ahead"] = sea([here, v["toward"]]) if v.get("toward") else []
+            if v.get("toward"):
+                rec["toward"] = v["toward"]
         result[mmsi] = rec
         print(f"{name}: {rec.get('source')} {rec.get('lat')},{rec.get('lon')} sog={rec.get('sog')} dest={rec.get('dest')} track={len(rec['track'])}")
     json.dump({"updated": iso(time.time()), "vessels": result}, open(out_path, "w"), ensure_ascii=False, indent=1)

@@ -538,10 +538,10 @@
     var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
     sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
     var line = sorted.map(function (p) { return p.ll; });
-    if (!line.length && !r.dest) { r.bounds = null; return; }
-    var bounds = L.latLngBounds(line.length ? line : [r.dest]);
-    if (line.length > 1) L.polyline(line, { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
     var sh = r.ship, shipLL = sh ? [sh.lat, sh.lon] : null;
+    if (!line.length && !r.dest && !shipLL) { r.bounds = null; return; }
+    var bounds = L.latLngBounds(line.length ? line : [r.dest || shipLL]);
+    if (line.length > 1) L.polyline(line, { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
     sorted.forEach(function (p, i) {
       var last = i === sorted.length - 1 && !shipLL;
       var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
@@ -565,11 +565,12 @@
       bounds.extend(shipLL);
       if (sh.ahead && sh.ahead.length) L.polyline([shipLL].concat(sh.ahead), { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
     }
-    if (r.dest) {
+    var dest = r.dest || (sh && sh.toward) || null;
+    if (dest) {
       var from = shipLL ? (sh.ahead && sh.ahead.length ? sh.ahead[sh.ahead.length - 1] : shipLL) : line[line.length - 1];
-      if (from) L.polyline([from, r.dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
-      L.circleMarker(r.dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地 " + (r.destName || ""));
-      bounds.extend(r.dest);
+      if (from) L.polyline([from, dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
+      L.circleMarker(dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地" + (r.dest && r.destName ? " " + r.destName : ""));
+      bounds.extend(dest);
     }
     r.bounds = bounds;
   }
@@ -602,7 +603,7 @@
       r.total++; r.pending++;
       lookup(loc.place).then(function (g) { if (g) r.pts.push({ i: i, ll: g.ll, alts: g.alts, t: t, place: loc.place }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
     });
-    r.destName = s.country ? (s.postcode ? s.postcode + " " : "") + countryEn(s.country) : null;
+    r.destName = s.country && s.postcode ? s.postcode + " " + countryEn(s.country) : null;
     if (r.destName) { r.pending++; lookup(r.destName).then(function (g) { if (g) { r.dest = g.ll; r.destTown = g.town; } }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
     if (!r.pending) schedule();
   }
