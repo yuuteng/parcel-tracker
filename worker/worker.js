@@ -11,6 +11,8 @@
 // GET /?no=CY034468628CN           tracking lookup
 // GET /list?u=<name>               the list saved under that name
 // PUT /list?u=<name>  {state}      save it; merged with the stored one when `base` is stale
+// GET /shared                      numbers everyone sees: { no: { by, t } }
+// POST /shared {no, name, on}      share (on) or unshare (off, sharer only)
 // Error codes: -18019902 = number not registered, -18019901 = already registered.
 
 const API = "https://api.17track.net/track/v2.2/";
@@ -27,7 +29,7 @@ export default {
     const allowed = (env.ALLOWED_ORIGINS || "https://yuuteng.github.io").split(",").map(s => s.trim());
     const cors = {
       "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0],
-      "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Vary": "Origin"
     };
@@ -36,6 +38,7 @@ export default {
 
     const url = new URL(req.url);
     if (url.pathname === "/list") return handleList(req, env, url, cors);
+    if (url.pathname === "/shared") return handleShared(req, env, url, cors);
     if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
@@ -143,6 +146,26 @@ async function handleList(req, env, url, cors) {
   next.updated = Date.now();
   await env.LISTS.put(kv, JSON.stringify(next));
   return json(next, 200, h);
+}
+
+async function handleShared(req, env, url, cors) {
+  if (!env.LISTS) return json({ error: "LISTS KV not bound" }, 500, cors);
+  const h = { ...cors, "Cache-Control": "no-store" };
+  const cur = (await env.LISTS.get("shared", "json")) || {};
+  if (req.method === "GET") return json(cur, 200, h);
+  if (req.method !== "POST") return json({ error: "method not allowed" }, 405, h);
+  let b;
+  try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400, h); }
+  const no = String(b.no || "").trim().toUpperCase(), key = normName(b.name);
+  const disp = String(b.name || "").normalize("NFC").trim().replace(/\s+/g, " ").slice(0, NAME_MAX);
+  if (!NUM_RE.test(no) || !key) return json({ error: "bad request" }, 400, h);
+  if (b.on) { if (!cur[no]) cur[no] = { by: disp, t: Date.now() }; }
+  else if (cur[no]) {
+    if (normName(cur[no].by) !== key) return json({ error: "shared by someone else" }, 403, h);
+    delete cur[no];
+  }
+  await env.LISTS.put("shared", JSON.stringify(cur));
+  return json(cur, 200, h);
 }
 
 function json(obj, status, headers) {

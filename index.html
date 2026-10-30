@@ -40,9 +40,29 @@
   .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
   .top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em}
   .top .stamp{font:12px var(--mono);color:var(--mute)}
-  .top h1 span{font-weight:400;font-size:14px;color:var(--mute);margin-left:8px}
-  .who{display:flex;gap:6px}
-  .who input{width:130px;padding:9px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--sans)}
+  .top{position:relative}
+  #me{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:8px;font-size:12.5px;color:var(--ink-2)}
+  #me .av{width:24px;height:24px;border-radius:6px;background:var(--acc);color:#111;font:600 12px var(--mono);display:grid;place-items:center}
+  #me b{font-weight:600;color:var(--ink)}
+  #me .arr{color:var(--mute);font-size:10px}
+  #me.empty{border-color:var(--acc);color:var(--acc)}
+  #me.empty .av{background:var(--line-2);color:var(--mute)}
+  .sheet{position:absolute;top:100%;right:0;margin-top:8px;width:300px;background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);z-index:1000}
+  .sheet .who{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .sheet .who .av{width:36px;height:36px;border-radius:9px;background:var(--acc);color:#111;font:600 16px var(--mono);display:grid;place-items:center}
+  .sheet .who .t{font-size:11px;color:var(--mute)} .sheet .who .n{font-weight:600}
+  .sheet .list{display:grid;gap:2px;margin:0 -6px}
+  .sheet .list button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:0;border-radius:7px;background:none;font-size:13px;text-align:left;color:var(--ink)}
+  .sheet .list button:hover{background:var(--panel-2)}
+  .sheet .list .av{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line-2);color:var(--ink-2);font:600 11px var(--mono);display:grid;place-items:center}
+  .sheet .list .on{color:var(--acc)} .sheet .list .on .av{background:var(--acc-soft);border-color:var(--acc);color:var(--acc)}
+  .sheet .add{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .sheet .add input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2);color:var(--ink);font:13px var(--sans)}
+  .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden;font-size:11px;white-space:nowrap}
+  .seg button{padding:2px 8px;border:0;border-radius:0;background:none;color:var(--mute);font:500 11px var(--sans)}
+  .seg button.on{background:var(--acc);color:#111;font-weight:600}
+  .byline{font-size:11px;color:var(--mute);white-space:nowrap}
+  .byline b{color:var(--ink-2);font-weight:500}
   .stamp .off{color:var(--bad)}
   .stamp button{border:none;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
   .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
@@ -133,7 +153,10 @@
     body{padding-inline:12px;padding-block:12px 32px}
     .top{gap:8px 12px;margin-bottom:10px}
     .top .stamp{width:100%;order:3}
-    #theme{order:1;margin-left:auto;padding:5px 6px 5px 8px}
+    #me{order:1;margin-left:auto;padding:4px 8px 4px 4px}
+    #me b{display:none}
+    #theme{order:1;padding:5px 6px 5px 8px}
+    .sheet{left:0;right:0;width:auto}
     .controls{order:2;margin-left:0;flex-basis:100%;max-width:none}
     .mapwrap{height:38vh;min-height:240px}
     .legend{gap:8px;font-size:10.5px;padding:4px 8px}
@@ -167,16 +190,17 @@
 </head>
 <body>
 <div class="top">
-  <h1>快递追踪<span id="who-name"></span></h1><span class="stamp" id="stamp"></span>
-  <form class="who" id="who-form" autocomplete="off">
-    <input id="who" type="text" placeholder="名字" list="who-recent" spellcheck="false" maxlength="40" aria-label="名字">
-    <datalist id="who-recent"></datalist>
-    <button type="submit">进入</button>
-  </form>
+  <h1>快递追踪</h1><span class="stamp" id="stamp"></span>
   <div class="controls">
     <input id="input" type="text" placeholder="输入单号,多个用空格分开" autocomplete="off" spellcheck="false" aria-label="添加单号">
     <button class="pri" id="add">添加</button>
     <button id="refresh">全部刷新</button>
+  </div>
+  <button type="button" class="empty" id="me" aria-haspopup="dialog" aria-expanded="false"><span class="av" id="me-av">?</span><b id="me-name">选择名字</b><span class="arr">▾</span></button>
+  <div class="sheet" id="sheet" hidden>
+    <div class="who"><span class="av" id="sheet-av">?</span><div><div class="t">当前</div><div class="n" id="sheet-name">还没选名字</div></div></div>
+    <div class="list" id="sheet-list"></div>
+    <form class="add" id="who-form" autocomplete="off"><input id="who" type="text" placeholder="换一个名字" spellcheck="false" maxlength="40" aria-label="名字"><button type="submit" class="pri">进入</button></form>
   </div>
   <button id="theme" title="主题:点击在 自动 / 浅色 / 深色 之间切换" aria-label="切换主题">
     <svg class="ic ic-auto" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg>
@@ -237,9 +261,13 @@
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
 
-  // ---- shared numbers come from numbers.json in the repo; personal ones live
+  // ---- shared numbers: Worker KV "shared" { no: {by, t} }; personal ones live
   // under a name in the Worker's KV, cached in localStorage ----
-  var shared = [];
+  var shared = {};
+  function isShared(n) { return Object.prototype.hasOwnProperty.call(shared, n); }
+  function sharedByMe(n) { return isShared(n) && normName(shared[n].by) === whoKey; }
+  function inMine(n) { return numbers.indexOf(n) >= 0; }
+  function pubList() { return Object.keys(shared).filter(function (n) { return !inMine(n); }); }
   // Vessel positions collected every 4 h by .github/workflows/ships.yml.
   var SHIPS_URL = "https://raw.githubusercontent.com/yuuteng/parcel-tracker/ship-data/ships.json";
   var shipsP = null;
@@ -268,9 +296,23 @@
     return null;
   }
   function loadShared() {
-    return fetch("numbers.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { shared = (j && j.shared || []).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean); })
-      .catch(function () { shared = []; });
+    return fetch(WORKER_URL + "/shared", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && typeof j === "object") shared = j; })
+      .catch(function () {});
+  }
+  function setShared(n, on) {
+    var prev = shared[n];
+    if (on) shared[n] = { by: who, t: Date.now() }; else delete shared[n];
+    paintShare(n);
+    return fetch(WORKER_URL + "/shared", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ no: n, name: who, on: !!on }) })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) { shared = j; paintShare(n); stamp(); })
+      .catch(function () { if (prev) shared[n] = prev; else delete shared[n]; paintShare(n); offline = true; stamp(); });
+  }
+  function paintShare(n) {
+    var el = list.querySelector('.card[data-n="' + n + '"] .seg'); if (!el) return;
+    var on = isShared(n);
+    el.children[0].classList.toggle("on", !on); el.children[1].classList.toggle("on", on);
   }
   function normName(s) { return String(s || "").normalize("NFC").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ").toLowerCase(); }
   function fromHash(k) { var m = location.hash.match(new RegExp("[#&]" + k + "=([^&]+)")); return m ? decodeURIComponent(m[1]) : null; }
@@ -303,14 +345,32 @@
         .catch(function () { offline = true; stamp(); });
     }, 300);
   }
-  function recent() { $("#who-recent").innerHTML = read(RECENT_KEY, []).map(function (x) { return '<option value="' + esc(x) + '">'; }).join(""); }
+  function initial(s) { return s ? String(s).trim().charAt(0).toUpperCase() : "?"; }
+  function setMe() {
+    var has = !!whoKey;
+    $("#me").classList.toggle("empty", !has);
+    $("#me-av").textContent = $("#sheet-av").textContent = initial(who);
+    $("#me-name").textContent = has ? who : "选择名字";
+    $("#sheet-name").textContent = has ? who : "还没选名字";
+    document.title = has ? who + " · 快递追踪" : "快递追踪";
+  }
+  function recent() {
+    $("#sheet-list").innerHTML = read(RECENT_KEY, []).map(function (x) {
+      var on = normName(x) === whoKey;
+      return '<button type="button" data-name="' + esc(x) + '"' + (on ? ' class="on"' : "") + '><span class="av">' + esc(initial(x)) + "</span>" + esc(x) + "</button>";
+    }).join("");
+  }
+  function openSheet(open) {
+    $("#sheet").hidden = !open; $("#me").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) { $("#who").value = ""; $("#who").focus(); }
+  }
   // Switch to a name: local cache first, then the Worker; a share link (#n=) only ever adds numbers.
   function enter(name, cb) {
     var disp = String(name || "").normalize("NFC").trim().replace(/\s+/g, " "), key = normName(disp);
     if (!key) return;
     who = disp; whoKey = key; store(USER_KEY, who);
     var rec = read(RECENT_KEY, []).filter(function (x) { return normName(x) !== key; }); rec.unshift(who); store(RECENT_KEY, rec.slice(0, 6)); recent();
-    $("#who").value = who; $("#who-name").textContent = who; document.title = who + " · 快递追踪";
+    setMe();
     var local = read(STATE_KEY + key, null);
     if (!local && !read(MIGRATED_KEY, false)) {
       var old = read(KEY, null);
@@ -326,7 +386,7 @@
         var l = local && local.dirty ? local : null;
         setState(st);
         if (st.name && st.name !== who) {
-          who = st.name; store(USER_KEY, who); $("#who").value = who; $("#who-name").textContent = who; document.title = who + " · 快递追踪";
+          who = st.name; store(USER_KEY, who); setMe();
           var r2 = read(RECENT_KEY, []).filter(function (x) { return normName(x) !== key; }); r2.unshift(who); store(RECENT_KEY, r2.slice(0, 6)); recent();
         }
         lastSaved = snapshot();
@@ -339,7 +399,7 @@
       })
       .catch(function () { offline = true; lastSaved = local && local.dirty ? "" : snapshot(); })
       .then(function () {
-        extra.forEach(function (n) { if (numbers.indexOf(n) < 0 && shared.indexOf(n) < 0) numbers.unshift(n); });
+        extra.forEach(function (n) { if (numbers.indexOf(n) < 0) numbers.unshift(n); });
         if (!offline || local) cacheState(local && local.dirty);
         persist(); if (cb) cb();
       });
@@ -681,7 +741,7 @@
   }
 
   // ---- cards ----
-  function shell(n, isShared) {
+  function shell(n, isPub) {
     var el = document.createElement("section");
     el.className = "card";
     el.dataset.n = n;
@@ -689,13 +749,22 @@
       '<div class="hd-l"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num">' + esc(n) + '</span>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button></div>' +
       '<div class="hd-m">' + chip("查询中", "") + '<span class="meta" data-role="meta"></span></div>' +
-      '<div class="hd-r">' + (isShared ? '<span class="tag" title="来自 numbers.json,大家都能看到">共享</span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
-                : '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
+      '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
+                : '<span class="seg" role="group" aria-label="可见范围"><button type="button" data-on="0"' + (isShared(n) ? "" : ' class="on"') + '>私有</button><button type="button" data-on="1"' + (isShared(n) ? ' class="on"' : "") + '>共享</button></span><button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
       '</div><div data-role="body"><div class="note">正在查询…</div></div>';
+    var seg = $(".seg", el);
+    if (seg) seg.addEventListener("click", function (e) {
+      var b = e.target.closest("button"); if (!b) return;
+      e.stopPropagation();
+      var on = b.dataset.on === "1";
+      if (on === isShared(n)) return;
+      if (!on && isShared(n) && !sharedByMe(n)) return;
+      setShared(n, on);
+    });
     $(".del", el).addEventListener("click", function (e) {
       e.stopPropagation();
-      if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); }
-      else { numbers = numbers.filter(function (x) { return x !== n; }); }
+      if (isPub) { if (hidden.indexOf(n) < 0) hidden.push(n); }
+      else { numbers = numbers.filter(function (x) { return x !== n; }); if (sharedByMe(n)) setShared(n, false); }
       persist();
       el.remove(); dropRoute(n);
       if (sel === n) { var first = list.querySelector(".card"); sel = null; if (first) select(first.dataset.n); }
@@ -838,9 +907,8 @@
   }
 
   function eligible() {
-    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0; });
-    var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0; });
-    return mine.concat(pub);
+    var pub = pubList().filter(function (n) { return hidden.indexOf(n) < 0; });
+    return numbers.concat(pub);
   }
   function allNumbers() {
     var all = eligible();
@@ -849,7 +917,7 @@
     if (order.length) {
       var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
       var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
-      all = fresh.filter(function (n) { return shared.indexOf(n) < 0; }).concat(known, fresh.filter(function (n) { return shared.indexOf(n) >= 0; }));
+      all = fresh.filter(inMine).concat(known, fresh.filter(function (n) { return !inMine(n); }));
     }
     return showArchived ? all.concat(arch) : all;
   }
@@ -915,13 +983,13 @@
     var all = allNumbers();
     if (!all.length) { showEmpty(); stamp(); sel = null; return; }
     if (sel == null || all.indexOf(sel) < 0) sel = all[0];
-    all.forEach(function (n) { var el = shell(n, shared.indexOf(n) >= 0); if (n === sel) el.classList.add("sel"); list.appendChild(el); load(el, n); });
+    all.forEach(function (n) { var el = shell(n, !inMine(n)); if (n === sel) el.classList.add("sel"); list.appendChild(el); load(el, n); });
     stamp();
   }
   function addCard(n) {
     if (list.querySelector(".card[data-n=\"" + n + "\"]")) return;
     var empty = $(".empty", list); if (empty) empty.remove();
-    var all = allNumbers(), i = all.indexOf(n), el = shell(n, shared.indexOf(n) >= 0), before = null;
+    var all = allNumbers(), i = all.indexOf(n), el = shell(n, !inMine(n)), before = null;
     for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
     list.insertBefore(el, before);
     if (sel == null) { sel = n; el.classList.add("sel"); }
@@ -929,10 +997,11 @@
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
-    var hid = hidden.filter(function (n) { return shared.indexOf(n) >= 0; }).length;
+    var pubs = pubList();
+    var hid = hidden.filter(function (n) { return pubs.indexOf(n) >= 0; }).length;
     var arch = eligible().filter(isArchived);
-    var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
-    var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
+    var mine = numbers.filter(function (n) { return arch.indexOf(n) < 0; }).length;
+    var pub = pubs.filter(function (n) { return hidden.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
     $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) +
       " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") + (offline ? ' · <span class="off">未同步到云端</span>' : "") +
       (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "") +
@@ -944,20 +1013,25 @@
   function add() {
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
-    if (!whoKey) { $("#who").focus(); return; }
+    if (!whoKey) { openSheet(true); return; }
     var fresh = [];
     raw.split(/[\s,，;；]+/).forEach(function (n) {
       if (!n) return;
-      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); fresh.push(n); return; }
+      hidden = hidden.filter(function (x) { return x !== n; });
       if (numbers.indexOf(n) < 0) { numbers.unshift(n); fresh.push(n); }
     });
+    if (fresh.length) { fresh.forEach(function (n) { var c = list.querySelector('.card[data-n="' + n + '"]'); if (c) { c.remove(); dropRoute(n); } }); }
     $("#input").value = ""; persist();
     fresh.forEach(addCard); stamp();
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
   $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(function () { if (whoKey) enter(who, render); else render(); }); });
-  $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); if (normName($("#who").value)) enter($("#who").value, render); });
+  $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); var v = $("#who").value; if (normName(v)) { openSheet(false); enter(v, render); } });
+  $("#me").addEventListener("click", function () { openSheet($("#sheet").hidden); });
+  $("#sheet-list").addEventListener("click", function (e) { var b = e.target.closest("button[data-name]"); if (!b) return; openSheet(false); enter(b.dataset.name, render); });
+  document.addEventListener("click", function (e) { if (!$("#sheet").hidden && !e.target.closest("#sheet, #me")) openSheet(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("#sheet").hidden) openSheet(false); });
   window.addEventListener("hashchange", function () { var u = fromHash("u"); if (u && normName(u) !== whoKey) enter(u, render); else if (hashNumbers().length && whoKey) enter(who, render); });
   window.addEventListener("resize", function () { map.invalidateSize(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
@@ -975,10 +1049,10 @@
   applyTheme(themeNow());
 
   loadShips();
-  recent();
+  setMe(); recent();
   loadShared().then(function () {
     var u = fromHash("u") || read(USER_KEY, "");
-    if (normName(u)) enter(u, render); else { render(); $("#who").focus(); }
+    if (normName(u)) enter(u, render); else { render(); openSheet(true); }
   });
 })();
 </script>

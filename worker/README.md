@@ -10,6 +10,8 @@ Registering a new number costs 1 quota; later lookups of the same number are fre
 ## Lists
 One list per name in the `parcel-lists` KV namespace (binding `LISTS`, key `list:<name>`, name lowercased with spaces collapsed). `GET /list?u=teng` returns it, `PUT /list?u=teng` saves it; a `PUT` whose `base` is older than the stored `updated` is merged (union of numbers, newest delivery time) instead of replacing.
 
+`GET /shared` returns `{ no: { by, t } }`, the numbers everyone sees; `POST /shared` with `{ no, name, on }` shares or unshares one (unshare only by the name that shared it). Stored in the same namespace under key `shared`.
+
 ## Vars
 - `TRACK17_TOKEN` (secret) — API key from admin.17track.net → Settings → API.
 - `ALLOWED_ORIGINS` — comma-separated page origins, default `https://yuuteng.github.io`.
