@@ -16,6 +16,7 @@
     --bg:#0b1220; --panel:#111a2c; --panel-2:#172238; --ink:#e6ecf5; --ink-2:#a7b4c8; --mute:#66758f; --line:#1f2b42; --line-2:#2c3a57;
     --acc:#f5a524; --acc-soft:rgba(245,165,36,.12); --here:#ff6b3d; --ok:#3ecf8e; --warn:#f5a524; --pick:#5aa9ff; --bad:#ff5c5c;
     --tile-filter:invert(1) hue-rotate(190deg) brightness(.72) saturate(.35) contrast(1.05);
+    --pop-shadow:0 0 0 1px rgba(0,0,0,.6),0 18px 48px rgba(0,0,0,.65);
     --sans:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
     color-scheme:dark;
   }
@@ -24,12 +25,14 @@
       --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
       --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
       --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
+      --pop-shadow:0 0 0 1px rgba(0,0,0,.08),0 18px 48px rgba(17,26,44,.22);
     }
   }
   :root[data-theme="light"]{
     --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
     --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
     --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
+    --pop-shadow:0 0 0 1px rgba(0,0,0,.08),0 18px 48px rgba(17,26,44,.22);
   }
   *{box-sizing:border-box}
   html,body{margin:0}
@@ -47,17 +50,19 @@
   #me .arr{color:var(--mute);font-size:10px}
   #me.empty{border-color:var(--acc);color:var(--acc)}
   #me.empty .av{background:var(--line-2);color:var(--mute)}
-  .sheet{position:absolute;top:100%;right:0;margin-top:8px;width:300px;background:var(--panel);border:1px solid var(--line-2);border-radius:12px;padding:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);z-index:1000}
+  .sheet{position:absolute;top:100%;right:0;margin-top:10px;width:300px;background:var(--bg);border:1px solid var(--acc);border-radius:12px;padding:14px;box-shadow:var(--pop-shadow);z-index:1100}
+  .sheet::before{content:"";position:absolute;top:-7px;right:var(--caret,28px);width:12px;height:12px;background:var(--bg);border-left:1px solid var(--acc);border-top:1px solid var(--acc);transform:rotate(45deg)}
+  .sheet .who .av.blank{background:var(--line-2);color:var(--mute)}
   .sheet .who{display:flex;align-items:center;gap:10px;margin-bottom:12px}
   .sheet .who .av{width:36px;height:36px;border-radius:9px;background:var(--acc);color:#111;font:600 16px var(--mono);display:grid;place-items:center}
   .sheet .who .t{font-size:11px;color:var(--mute)} .sheet .who .n{font-weight:600}
   .sheet .list{display:grid;gap:2px;margin:0 -6px}
   .sheet .list button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:0;border-radius:7px;background:none;font-size:13px;text-align:left;color:var(--ink)}
-  .sheet .list button:hover{background:var(--panel-2)}
+  .sheet .list button:hover{background:var(--panel)}
   .sheet .list .av{width:22px;height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line-2);color:var(--ink-2);font:600 11px var(--mono);display:grid;place-items:center}
   .sheet .list .on{color:var(--acc)} .sheet .list .on .av{background:var(--acc-soft);border-color:var(--acc);color:var(--acc)}
   .sheet .add{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-  .sheet .add input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel-2);color:var(--ink);font:13px var(--sans)}
+  .sheet .add input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--sans)}
   .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden;font-size:11px;white-space:nowrap}
   .seg button{padding:2px 8px;border:0;border-radius:0;background:none;color:var(--mute);font:500 11px var(--sans)}
   .seg button.on{background:var(--acc);color:#111;font-weight:600}
@@ -350,6 +355,7 @@
     var has = !!whoKey;
     $("#me").classList.toggle("empty", !has);
     $("#me-av").textContent = $("#sheet-av").textContent = initial(who);
+    $("#sheet-av").classList.toggle("blank", !has);
     $("#me-name").textContent = has ? who : "选择名字";
     $("#sheet-name").textContent = has ? who : "还没选名字";
     document.title = has ? who + " · 快递追踪" : "快递追踪";
@@ -361,7 +367,14 @@
     }).join("");
   }
   function openSheet(open) {
-    $("#sheet").hidden = !open; $("#me").setAttribute("aria-expanded", open ? "true" : "false");
+    var sh = $("#sheet"), me = $("#me");
+    if (open) {
+      var t = $(".top").getBoundingClientRect(), m = me.getBoundingClientRect(), phone = window.matchMedia("(max-width:760px)").matches;
+      var off = phone ? 0 : Math.max(0, Math.round(t.right - m.right));
+      sh.style.right = phone ? "" : off + "px";
+      sh.style.setProperty("--caret", Math.round(t.right - (m.left + m.width / 2) - off - 6) + "px");
+    }
+    sh.hidden = !open; me.setAttribute("aria-expanded", open ? "true" : "false");
     if (open) { $("#who").value = ""; $("#who").focus(); }
   }
   // Switch to a name: local cache first, then the Worker; a share link (#n=) only ever adds numbers.
