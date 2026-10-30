@@ -37,7 +37,7 @@
   *{box-sizing:border-box}
   html,body{margin:0}
   body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased;padding-inline:16px;padding-block:16px 48px}
-  @media (min-width:980px){body{padding-inline:24px;padding-block:24px 48px}}
+  @media (min-width:980px){body{padding-inline:24px;padding-block:24px}}
   .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
 
   .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
@@ -97,7 +97,7 @@
   .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
   @media (min-width:980px){.layout{grid-template-columns:minmax(0,11fr) minmax(400px,9fr);align-items:start}}
   .mapwrap{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel-2);height:46vh;min-height:300px}
-  @media (min-width:980px){.mapwrap{position:sticky;top:24px;height:calc(100vh - 48px)}}
+  @media (min-width:980px){.mapwrap{position:sticky;top:24px;height:calc(100vh - 48px - var(--top-h,52px));height:calc(100dvh - 48px - var(--top-h,52px));min-height:360px}}
   #map{position:absolute;inset:0;background:var(--panel-2)}
   .leaflet-container{font-family:var(--sans)}
   .leaflet-tile-pane{filter:var(--tile-filter)}
@@ -1253,7 +1253,9 @@
     if (drag) dropCard(true); else if (sheetOpen) openSheet(false);
   });
   window.addEventListener("hashchange", function () { var u = fromHash("u"); if (u && normName(u) !== whoKey) enter(u, render); else if (hashNumbers().length && whoKey) enter(who, render); });
-  window.addEventListener("resize", function () { map.invalidateSize(); });
+  function topH() { var t = $(".top"); document.documentElement.style.setProperty("--top-h", (t.offsetHeight + parseFloat(getComputedStyle(t).marginBottom)) + "px"); }
+  topH();
+  window.addEventListener("resize", function () { topH(); map.invalidateSize(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
 
   // ---- theme: auto → light → dark ----
