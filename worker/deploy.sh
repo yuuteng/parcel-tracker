@@ -5,6 +5,7 @@ set -euo pipefail
 NAME=parcel-17track
 DIR=$(cd "$(dirname "$0")" && pwd)
 : "${CLOUDFLARE_API_TOKEN:?}" "${CLOUDFLARE_ACCOUNT_ID:?}"
+KV_LISTS_ID=${KV_LISTS_ID:-}
 API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
 AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
 
@@ -12,13 +13,14 @@ TOKEN=""; ORIGINS=""
 while [ $# -gt 0 ]; do case "$1" in --token) TOKEN=$2; shift 2;; --origins) ORIGINS=$2; shift 2;; *) echo "unknown arg $1"; exit 1;; esac; done
 
 # Bindings: keep whatever is already set unless overridden on the command line.
-BINDINGS=$(python3 - "$TOKEN" "$ORIGINS" <<'PY'
+BINDINGS=$(python3 - "$TOKEN" "$ORIGINS" "$KV_LISTS_ID" <<'PY'
 import json,sys
-token,origins=sys.argv[1],sys.argv[2]
+token,origins,kv=sys.argv[1],sys.argv[2],sys.argv[3]
 b=[]
+if kv: b.append({"type":"kv_namespace","name":"LISTS","namespace_id":kv})
 if token: b.append({"type":"secret_text","name":"TRACK17_TOKEN","text":token})
 if origins: b.append({"type":"plain_text","name":"ALLOWED_ORIGINS","text":origins})
-print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":b,"keep_bindings":["secret_text","plain_text"]}))
+print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":b,"keep_bindings":["secret_text","plain_text","kv_namespace"]}))
 PY
 )
 echo "$BINDINGS" > "$DIR/.metadata.json"

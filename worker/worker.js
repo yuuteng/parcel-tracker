@@ -6,7 +6,11 @@
 //   TRACK17_TOKEN    17TRACK API key (Settings → API in the 17TRACK dashboard)
 //   ALLOWED_ORIGINS  comma-separated page origins, default https://yuuteng.github.io
 //
-// GET /?no=CY034468628CN
+//   LISTS            KV namespace holding one list per name (key list:<name>)
+//
+// GET /?no=CY034468628CN           tracking lookup
+// GET /list?u=<name>               the list saved under that name
+// PUT /list?u=<name>  {state}      save it; merged with the stored one when `base` is stale
 // Error codes: -18019902 = number not registered, -18019901 = already registered.
 
 const API = "https://api.17track.net/track/v2.2/";
@@ -23,15 +27,16 @@ export default {
     const allowed = (env.ALLOWED_ORIGINS || "https://yuuteng.github.io").split(",").map(s => s.trim());
     const cors = {
       "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : allowed[0],
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
       "Vary": "Origin"
     };
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     if (origin && !allowed.includes(origin)) return json({ error: "origin not allowed" }, 403, cors);
-    if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
 
     const url = new URL(req.url);
+    if (url.pathname === "/list") return handleList(req, env, url, cors);
+    if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
 
@@ -102,6 +107,42 @@ function normalize(no, acc) {
     traces: events,
     link: "https://t.17track.net/zh-cn#nums=" + no
   };
+}
+
+const NAME_MAX = 40, LIST_MAX = 200, NUM_RE = /^[A-Z0-9-]{4,40}$/;
+function normName(s) {
+  return String(s || "").normalize("NFC").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+function cleanState(s, name) {
+  const nums = x => Array.isArray(x) ? [...new Set(x.map(v => String(v).trim().toUpperCase()).filter(v => NUM_RE.test(v)))].slice(0, LIST_MAX) : [];
+  const out = { name: String((s && s.name) || name || "").normalize("NFC").trim().replace(/\s+/g, " ").slice(0, NAME_MAX),
+                numbers: nums(s && s.numbers), hidden: nums(s && s.hidden), delivered: {}, order: nums(s && s.order), updated: 0 };
+  const d = (s && s.delivered) || {};
+  for (const k of Object.keys(d)) { const K = String(k).toUpperCase(), t = +d[k]; if (NUM_RE.test(K) && t > 0) out.delivered[K] = t; }
+  return out;
+}
+async function handleList(req, env, url, cors) {
+  if (!env.LISTS) return json({ error: "LISTS KV not bound" }, 500, cors);
+  const raw = url.searchParams.get("u"), key = normName(raw);
+  if (!key || key.length > NAME_MAX) return json({ error: "bad name" }, 400, cors);
+  const h = { ...cors, "Cache-Control": "no-store" };
+  const kv = "list:" + key;
+  const old = await env.LISTS.get(kv, "json");
+  if (req.method === "GET") return json(old || cleanState(null, raw), 200, h);
+  if (req.method !== "PUT") return json({ error: "method not allowed" }, 405, h);
+  let body;
+  try { body = await req.json(); } catch (e) { return json({ error: "bad json" }, 400, h); }
+  const next = cleanState(body, raw);
+  if (old && +body.base !== old.updated) {
+    const uniq = a => [...new Set(a)];
+    next.numbers = uniq(next.numbers.concat(old.numbers || []));
+    next.hidden = uniq(next.hidden.concat(old.hidden || []));
+    for (const k of Object.keys(old.delivered || {})) if (!(next.delivered[k] > old.delivered[k])) next.delivered[k] = old.delivered[k];
+    next.order = uniq(next.order.concat(old.order || []));
+  }
+  next.updated = Date.now();
+  await env.LISTS.put(kv, JSON.stringify(next));
+  return json(next, 200, h);
 }
 
 function json(obj, status, headers) {

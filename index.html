@@ -40,6 +40,10 @@
   .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
   .top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em}
   .top .stamp{font:12px var(--mono);color:var(--mute)}
+  .top h1 span{font-weight:400;font-size:14px;color:var(--mute);margin-left:8px}
+  .who{display:flex;gap:6px}
+  .who input{width:130px;padding:9px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--sans)}
+  .stamp .off{color:var(--bad)}
   .stamp button{border:none;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
   .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
   #theme{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);padding:7px 8px 7px 10px}
@@ -163,7 +167,12 @@
 </head>
 <body>
 <div class="top">
-  <h1>快递追踪</h1><span class="stamp" id="stamp"></span>
+  <h1>快递追踪<span id="who-name"></span></h1><span class="stamp" id="stamp"></span>
+  <form class="who" id="who-form" autocomplete="off">
+    <input id="who" type="text" placeholder="名字" list="who-recent" spellcheck="false" maxlength="40" aria-label="名字">
+    <datalist id="who-recent"></datalist>
+    <button type="submit">进入</button>
+  </form>
   <div class="controls">
     <input id="input" type="text" placeholder="输入单号,多个用空格分开" autocomplete="off" spellcheck="false" aria-label="添加单号">
     <button class="pri" id="add">添加</button>
@@ -191,12 +200,12 @@
   var APP = "642e7f7573f04222943d090e";
   // Cloudflare Worker relaying 17TRACK (see worker/README.md). Empty = third source disabled.
   var WORKER_URL = "https://parcel-17track.yuuteng.workers.dev";
-  var KEY = "parcel-tracker.numbers.v1";
+  // Pre-name storage, imported once into the first name used on this device.
+  var KEY = "parcel-tracker.numbers.v1", HIDE_KEY = "parcel-tracker.hidden.v1", DELIVERED_KEY = "parcel-tracker.delivered.v1", ORDER_KEY = "parcel-tracker.order.v1";
   var GEO_KEY = "parcel-tracker.geo.v3";
-  var HIDE_KEY = "parcel-tracker.hidden.v1";
-  var DELIVERED_KEY = "parcel-tracker.delivered.v1";
   var ARCHIVE_DAYS = 5;
-  var ORDER_KEY = "parcel-tracker.order.v1";
+  var USER_KEY = "parcel-tracker.user.v1", RECENT_KEY = "parcel-tracker.users.v1", MIGRATED_KEY = "parcel-tracker.migrated.v1";
+  var STATE_KEY = "parcel-tracker.state.v2:";
   var STATUS = { in_transit: ["运输中", "warn"], delivered: ["已签收", "ok"], pending: ["待发货", ""],
                  picked_up: ["已揽收", "pick"], exception: ["异常", "bad"], out_for_delivery: ["派送中", "warn"] };
 
@@ -228,8 +237,8 @@
   function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
   function read(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
 
-  // ---- shared numbers come from numbers.json in the repo; personal ones from
-  // the URL hash, then localStorage ----
+  // ---- shared numbers come from numbers.json in the repo; personal ones live
+  // under a name in the Worker's KV, cached in localStorage ----
   var shared = [];
   // Vessel positions collected every 4 h by .github/workflows/ships.yml.
   var SHIPS_URL = "https://raw.githubusercontent.com/yuuteng/parcel-tracker/ship-data/ships.json";
@@ -263,21 +272,78 @@
       .then(function (j) { shared = (j && j.shared || []).map(function (x) { return String(x).trim().toUpperCase(); }).filter(Boolean); })
       .catch(function () { shared = []; });
   }
-  function fromHash() {
-    var m = location.hash.match(/[#&]n=([^&]+)/);
-    return m ? decodeURIComponent(m[1]).split(",").map(function (s) { return s.trim().toUpperCase(); }).filter(Boolean) : null;
-  }
-  var numbers = fromHash() || read(KEY, null) || [];
-  var hidden = read(HIDE_KEY, []);
-  var order = read(ORDER_KEY, []);
+  function normName(s) { return String(s || "").normalize("NFC").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ").toLowerCase(); }
+  function fromHash(k) { var m = location.hash.match(new RegExp("[#&]" + k + "=([^&]+)")); return m ? decodeURIComponent(m[1]) : null; }
+  function hashNumbers() { var v = fromHash("n"); return v ? v.split(",").map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean) : []; }
+  var who = "", whoKey = "", base = 0, numbers = [], hidden = [], order = [], showArchived = false, offline = false, saveT = null, lastSaved = "";
   // number → delivery time (ms); parcels delivered over ARCHIVE_DAYS ago are archived and not fetched
-  var delivered = read(DELIVERED_KEY, {}), showArchived = false;
+  var delivered = {};
   function isArchived(n) { return !!delivered[n] && Date.now() - delivered[n] > ARCHIVE_DAYS * 86400000; }
+  function setState(st) { numbers = st.numbers || []; hidden = st.hidden || []; order = st.order || []; delivered = st.delivered || {}; base = st.updated || 0; }
+  function snapshot() { return JSON.stringify([who, numbers, hidden, delivered, order]); }
+  function cacheState(dirty) { store(STATE_KEY + whoKey, { name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, updated: base, dirty: !!dirty }); }
   function persist() {
-    store(KEY, numbers);
-    history.replaceState(null, "", location.pathname + location.search + (numbers.length ? "#n=" + encodeURIComponent(numbers.join(",")) : ""));
+    if (!whoKey) return;
+    history.replaceState(null, "", location.pathname + location.search + "#u=" + encodeURIComponent(who));
+    var snap = snapshot();
+    if (snap === lastSaved) return;
+    lastSaved = snap; cacheState(true);
+    clearTimeout(saveT);
+    saveT = setTimeout(function () {
+      var mine = whoKey;
+      fetch(WORKER_URL + "/list?u=" + encodeURIComponent(who), { method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, base: base }) })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(function (st) {
+          if (mine !== whoKey) return;
+          var changed = JSON.stringify(st.numbers) !== JSON.stringify(numbers) || JSON.stringify(st.hidden) !== JSON.stringify(hidden);
+          setState(st); offline = false; lastSaved = snapshot(); cacheState(false);
+          if (changed) render(); else stamp();
+        })
+        .catch(function () { offline = true; stamp(); });
+    }, 300);
   }
-  persist();
+  function recent() { $("#who-recent").innerHTML = read(RECENT_KEY, []).map(function (x) { return '<option value="' + esc(x) + '">'; }).join(""); }
+  // Switch to a name: local cache first, then the Worker; a share link (#n=) only ever adds numbers.
+  function enter(name, cb) {
+    var disp = String(name || "").normalize("NFC").trim().replace(/\s+/g, " "), key = normName(disp);
+    if (!key) return;
+    who = disp; whoKey = key; store(USER_KEY, who);
+    var rec = read(RECENT_KEY, []).filter(function (x) { return normName(x) !== key; }); rec.unshift(who); store(RECENT_KEY, rec.slice(0, 6)); recent();
+    $("#who").value = who; $("#who-name").textContent = who; document.title = who + " · 快递追踪";
+    var local = read(STATE_KEY + key, null);
+    if (!local && !read(MIGRATED_KEY, false)) {
+      var old = read(KEY, null);
+      if (old && old.length) local = { numbers: old, hidden: read(HIDE_KEY, []), delivered: read(DELIVERED_KEY, {}), order: read(ORDER_KEY, []), updated: 0, dirty: true };
+      store(MIGRATED_KEY, true);
+    }
+    setState(local || {});
+    var extra = hashNumbers();
+    fetch(WORKER_URL + "/list?u=" + encodeURIComponent(who), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (st) {
+        offline = false;
+        var l = local && local.dirty ? local : null;
+        setState(st);
+        if (st.name && st.name !== who) {
+          who = st.name; store(USER_KEY, who); $("#who").value = who; $("#who-name").textContent = who; document.title = who + " · 快递追踪";
+          var r2 = read(RECENT_KEY, []).filter(function (x) { return normName(x) !== key; }); r2.unshift(who); store(RECENT_KEY, r2.slice(0, 6)); recent();
+        }
+        lastSaved = snapshot();
+        if (l) {
+          (l.numbers || []).forEach(function (n) { if (numbers.indexOf(n) < 0) numbers.push(n); });
+          (l.hidden || []).forEach(function (n) { if (hidden.indexOf(n) < 0) hidden.push(n); });
+          Object.keys(l.delivered || {}).forEach(function (k) { if (!(delivered[k] >= l.delivered[k])) delivered[k] = l.delivered[k]; });
+          if (!order.length) order = l.order || [];
+        }
+      })
+      .catch(function () { offline = true; lastSaved = local && local.dirty ? "" : snapshot(); })
+      .then(function () {
+        extra.forEach(function (n) { if (numbers.indexOf(n) < 0 && shared.indexOf(n) < 0) numbers.unshift(n); });
+        if (!offline || local) cacheState(local && local.dirty);
+        persist(); if (cb) cb();
+      });
+  }
 
   // ---- nextsls ----
   // Upstream PHP sometimes prints warnings before the JSON body.
@@ -628,8 +694,9 @@
       '</div><div data-role="body"><div class="note">正在查询…</div></div>';
     $(".del", el).addEventListener("click", function (e) {
       e.stopPropagation();
-      if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); store(HIDE_KEY, hidden); }
-      else { numbers = numbers.filter(function (x) { return x !== n; }); persist(); }
+      if (isShared) { if (hidden.indexOf(n) < 0) hidden.push(n); }
+      else { numbers = numbers.filter(function (x) { return x !== n; }); }
+      persist();
       el.remove(); dropRoute(n);
       if (sel === n) { var first = list.querySelector(".card"); sel = null; if (first) select(first.dataset.n); }
       if (!list.querySelector(".card")) showEmpty(); stamp();
@@ -668,7 +735,7 @@
     var days = first ? daysBetween(first, isDel && last ? last : new Date()) : null;
     $(".st", head).outerHTML = chip(st[0], st[1], days);
     if (isDel && last) delivered[n] = last.getTime(); else delete delivered[n];
-    store(DELIVERED_KEY, delivered);
+    persist();
     el.classList.toggle("arch", isArchived(n));
     if (isArchived(n) && !showArchived) { archiveNow(el, n); return; }
 
@@ -795,7 +862,7 @@
   }
   function saveOrder() {
     order = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
-    store(ORDER_KEY, order);
+    persist();
   }
 
   // ---- drag to reorder: pointer events on the grip, works with touch ----
@@ -840,7 +907,7 @@
   function showEmpty() {
     list.innerHTML = eligible().length && !showArchived
       ? '<div class="empty">单号都已签收满 ' + ARCHIVE_DAYS + ' 天并归档,点上方「显示」查看。</div>'
-      : '<div class="empty">还没有单号。在上面输入一个,回车。</div>';
+      : whoKey ? '<div class="empty">还没有单号。在上面输入一个,回车。</div>' : '<div class="empty">先在上面输入名字,回车。</div>';
   }
   function render() {
     list.innerHTML = "";
@@ -867,20 +934,21 @@
     var mine = numbers.filter(function (n) { return shared.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
     var pub = shared.filter(function (n) { return hidden.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
     $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) +
-      " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") +
+      " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") + (offline ? ' · <span class="off">未同步到云端</span>' : "") +
       (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "") +
       (arch.length ? ' · <span title="签收满 ' + ARCHIVE_DAYS + ' 天自动归档">已归档 ' + arch.length + ' 个</span> <button type="button" id="arch">' + (showArchived ? "收起" : "显示") + '</button>' : "");
-    var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; store(HIDE_KEY, hidden); render(); });
+    var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; persist(); render(); });
     var a = $("#arch"); if (a) a.addEventListener("click", function () { showArchived = !showArchived; render(); });
   }
 
   function add() {
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
+    if (!whoKey) { $("#who").focus(); return; }
     var fresh = [];
     raw.split(/[\s,，;；]+/).forEach(function (n) {
       if (!n) return;
-      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); store(HIDE_KEY, hidden); fresh.push(n); return; }
+      if (shared.indexOf(n) >= 0) { hidden = hidden.filter(function (x) { return x !== n; }); fresh.push(n); return; }
       if (numbers.indexOf(n) < 0) { numbers.unshift(n); fresh.push(n); }
     });
     $("#input").value = ""; persist();
@@ -888,8 +956,9 @@
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
-  $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(render); });
-  window.addEventListener("hashchange", function () { var h = fromHash(); if (h) { numbers = h; persist(); render(); } });
+  $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(function () { if (whoKey) enter(who, render); else render(); }); });
+  $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); if (normName($("#who").value)) enter($("#who").value, render); });
+  window.addEventListener("hashchange", function () { var u = fromHash("u"); if (u && normName(u) !== whoKey) enter(u, render); else if (hashNumbers().length && whoKey) enter(who, render); });
   window.addEventListener("resize", function () { map.invalidateSize(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
 
@@ -906,7 +975,11 @@
   applyTheme(themeNow());
 
   loadShips();
-  loadShared().then(render);
+  recent();
+  loadShared().then(function () {
+    var u = fromHash("u") || read(USER_KEY, "");
+    if (normName(u)) enter(u, render); else { render(); $("#who").focus(); }
+  });
 })();
 </script>
 </body>
