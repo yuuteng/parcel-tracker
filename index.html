@@ -42,7 +42,17 @@
 
   .top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
   .top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:-.01em}
-  .top .stamp{font:12px var(--mono);color:var(--mute)}
+  #refresh{position:relative;width:30px;height:30px;padding:0;margin-left:-6px;border:0;border-radius:8px;background:none;color:var(--mute);display:grid;place-items:center;transition:color .15s,background .15s}
+  #refresh:hover{color:var(--acc);background:var(--acc-soft)}
+  #refresh svg{transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+  #refresh:hover svg{transform:rotate(-40deg)}
+  #refresh.spin svg{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #refresh .dot{position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 2px var(--bg);transform:scale(0);transition:transform .25s cubic-bezier(.2,.8,.2,1)}
+  #refresh.bad .dot{transform:scale(1)}
+  .foot{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 18px;padding:4px 0 8px;font-size:12.5px;color:var(--mute)}
+  .foot button{border:0;background:none;padding:0;color:var(--acc);font:inherit;cursor:pointer}
+  .foot button:hover{text-decoration:underline}
   .top{position:relative}
   #me{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:8px;font-size:12.5px;color:var(--ink-2)}
   #me .av{width:24px;height:24px;border-radius:6px;background:var(--acc);color:#111;font:600 12px var(--mono);display:grid;place-items:center}
@@ -71,8 +81,6 @@
   .seg button.on{background:var(--acc);color:#111;font-weight:600}
   .byline{font-size:11px;color:var(--mute);white-space:nowrap}
   .byline b{color:var(--ink-2);font-weight:500}
-  .stamp .off{color:var(--bad)}
-  .stamp button{border:none;background:none;color:var(--acc);font:inherit;padding:0;cursor:pointer;text-decoration:underline dotted}
   .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
   #theme{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);padding:7px 8px 7px 10px}
   #theme .ic{display:none;color:var(--acc)}
@@ -165,7 +173,6 @@
   @media (max-width:760px){
     body{padding-inline:12px;padding-block:12px 32px}
     .top{gap:8px 12px;margin-bottom:10px}
-    .top .stamp{width:100%;order:3}
     #me{order:1;margin-left:auto;padding:4px 8px 4px 4px}
     #me b{display:none}
     #theme{order:1;padding:5px 6px 5px 8px}
@@ -203,11 +210,11 @@
 </head>
 <body>
 <div class="top">
-  <h1>快递追踪</h1><span class="stamp" id="stamp"></span>
+  <h1>快递追踪</h1>
+  <button type="button" id="refresh" aria-label="刷新"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg><i class="dot"></i></button>
   <div class="controls">
     <input id="input" type="text" placeholder="输入单号,多个用空格分开" autocomplete="off" spellcheck="false" aria-label="添加单号">
     <button class="pri" id="add">添加</button>
-    <button id="refresh">全部刷新</button>
   </div>
   <button type="button" class="empty" id="me" aria-haspopup="dialog" aria-expanded="false"><span class="av" id="me-av">?</span><b id="me-name">选择名字</b><span class="arr">▾</span></button>
   <div class="sheet" id="sheet" hidden>
@@ -1081,7 +1088,7 @@
     var sib = Array.prototype.filter.call(list.children, function (c) { return c !== d.el && c !== d.ph && c.classList.contains("card"); });
     var tops = new Map();
     sib.forEach(function (c) { tops.set(c, c.getBoundingClientRect().top); c.getAnimations().forEach(function (a) { a.cancel(); }); });
-    list.insertBefore(d.ph, ref);
+    list.insertBefore(d.ph, ref || $(".foot", list));
     if (calm()) return;
     sib.forEach(function (c) {
       var dy = tops.get(c) - c.getBoundingClientRect().top;
@@ -1144,7 +1151,7 @@
   }
   function showEmpty() {
     list.innerHTML = eligible().length && !showArchived
-      ? '<div class="empty">单号都已签收满 ' + ARCHIVE_DAYS + ' 天并归档,点上方「显示」查看。</div>'
+      ? '<div class="empty">单号都已签收满 ' + ARCHIVE_DAYS + ' 天并归档。</div>'
       : whoKey ? '<div class="empty">还没有单号。在上面输入一个,回车。</div>' : '<div class="empty">先在上面输入名字,回车。</div>';
   }
   function render() {
@@ -1162,23 +1169,59 @@
     var empty = $(".empty", list); if (empty) empty.remove();
     var all = allNumbers(), i = all.indexOf(n), el = shell(n, !inMine(n)), before = null;
     for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
-    list.insertBefore(el, before);
+    list.insertBefore(el, before || $(".foot", list));
     if (sel == null) { sel = n; el.classList.add("sel"); }
     load(el, n); enterAnim(el, 0);
   }
+  var lastFetch = Date.now();
+  function ago(t) {
+    var m = Math.round((Date.now() - t) / 60000);
+    return m < 1 ? "刚刚更新" : m < 60 ? m + " 分钟前更新" : Math.round(m / 60) + " 小时前更新";
+  }
   function stamp() {
-    var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
+    var r = $("#refresh");
+    r.classList.toggle("bad", offline);
+    r.title = offline ? "未同步到云端,点击重试" : ago(lastFetch) + ",点击刷新";
     var pubs = pubList();
     var hid = hidden.filter(function (n) { return pubs.indexOf(n) >= 0; }).length;
+    var arch = eligible().filter(isArchived).length;
+    var foot = $(".foot", list);
+    if (!hid && !arch) { if (foot) foot.remove(); return; }
+    if (!foot) {
+      foot = document.createElement("div"); foot.className = "foot"; list.appendChild(foot);
+      if (!calm()) foot.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, easing: EASE });
+    } else if (foot !== list.lastElementChild) list.appendChild(foot);
+    foot.innerHTML = (arch ? '<span title="签收满 ' + ARCHIVE_DAYS + ' 天自动归档">已归档 ' + arch + ' 个 · <button type="button" data-act="arch">' + (showArchived ? "收起" : "显示") + "</button></span>" : "") +
+      (hid ? '<span>已隐藏 ' + hid + ' 个共享 · <button type="button" data-act="unhide">恢复</button></span>' : "");
+  }
+  function toggleArchived() {
+    showArchived = !showArchived;
     var arch = eligible().filter(isArchived);
-    var mine = numbers.filter(function (n) { return arch.indexOf(n) < 0; }).length;
-    var pub = pubs.filter(function (n) { return hidden.indexOf(n) < 0 && arch.indexOf(n) < 0; }).length;
-    $("#stamp").innerHTML = "刷新于 " + d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) +
-      " · " + mine + " 个单号" + (pub ? " + " + pub + " 个共享" : "") + (offline ? ' · <span class="off">未同步到云端</span>' : "") +
-      (hid ? ' · 已隐藏 ' + hid + ' 个 <button type="button" id="unhide">恢复</button>' : "") +
-      (arch.length ? ' · <span title="签收满 ' + ARCHIVE_DAYS + ' 天自动归档">已归档 ' + arch.length + ' 个</span> <button type="button" id="arch">' + (showArchived ? "收起" : "显示") + '</button>' : "");
-    var u = $("#unhide"); if (u) u.addEventListener("click", function () { hidden = []; persist(); render(); });
-    var a = $("#arch"); if (a) a.addEventListener("click", function () { showArchived = !showArchived; render(); });
+    if (showArchived) {
+      var empty = $(".empty", list); if (empty) empty.remove();
+      arch.forEach(function (n, i) { addCard(n); var el = list.querySelector('.card[data-n="' + n + '"]'); if (el) enterAnim(el, i); });
+      stamp();
+    } else {
+      var left = arch.length;
+      arch.forEach(function (n) {
+        var el = list.querySelector('.card[data-n="' + n + '"]'); dropRoute(n);
+        if (!el) { left--; return; }
+        leave(el, function () { if (--left === 0) { if (sel && !list.querySelector('.card[data-n="' + sel + '"]')) { var c = $(".card", list); sel = null; if (c) select(c.dataset.n); } if (!$(".card", list)) showEmpty(); stamp(); } });
+      });
+      if (!left) stamp();
+    }
+  }
+  list.addEventListener("click", function (e) {
+    var b = e.target.closest(".foot button"); if (!b) return;
+    if (b.dataset.act === "arch") toggleArchived();
+    else { hidden = []; persist(); render(); }
+  });
+  function refreshAll() {
+    var r = $("#refresh"); if (r.classList.contains("spin")) return;
+    var t0 = Date.now(); r.classList.add("spin");
+    var done = function () { lastFetch = Date.now(); setTimeout(function () { r.classList.remove("spin"); stamp(); }, Math.max(0, 700 - (Date.now() - t0))); };
+    loadShips();
+    loadShared().then(function () { if (whoKey) enter(who, function () { render(); done(); }); else { render(); done(); } });
   }
 
   function add() {
@@ -1197,7 +1240,8 @@
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
-  $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(function () { if (whoKey) enter(who, render); else render(); }); });
+  $("#refresh").addEventListener("click", refreshAll);
+  $("#refresh").addEventListener("mouseenter", stamp);
   $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); var v = $("#who").value; if (normName(v)) { openSheet(false); enter(v, render); } });
   $("#me").addEventListener("click", function () { openSheet(!sheetOpen); });
   $("#sheet-list").addEventListener("click", function (e) { var b = e.target.closest("button[data-name]"); if (!b) return; openSheet(false); enter(b.dataset.name, render); });
