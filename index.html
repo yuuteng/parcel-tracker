@@ -950,26 +950,31 @@
   function enableDrag(el) {
     var grip = $(".grip", el);
     grip.addEventListener("pointerdown", function (e) {
+      if (e.button) return;
       e.preventDefault(); e.stopPropagation();
-      grip.setPointerCapture(e.pointerId);
+      var id = e.pointerId, before = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
       el.classList.add("dragging");
       function move(ev) {
+        if (ev.pointerId !== id) return;
+        ev.preventDefault();
         var over = document.elementFromPoint(ev.clientX, ev.clientY);
         var target = over && over.closest ? over.closest(".card") : null;
         if (!target || target === el || target.parentNode !== list) return;
         var r = target.getBoundingClientRect();
         if (ev.clientY < r.top + r.height / 2) list.insertBefore(el, target); else list.insertBefore(el, target.nextSibling);
       }
-      function up() {
-        grip.removeEventListener("pointermove", move);
-        grip.removeEventListener("pointerup", up);
-        grip.removeEventListener("pointercancel", up);
+      function up(ev) {
+        if (ev.pointerId !== id) return;
+        document.removeEventListener("pointermove", move);
+        document.removeEventListener("pointerup", up);
+        document.removeEventListener("pointercancel", up);
         el.classList.remove("dragging");
-        saveOrder(); stamp();
+        var after = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
+        if (after.join() !== before.join()) { saveOrder(); stamp(); }
       }
-      grip.addEventListener("pointermove", move);
-      grip.addEventListener("pointerup", up);
-      grip.addEventListener("pointercancel", up);
+      document.addEventListener("pointermove", move);
+      document.addEventListener("pointerup", up);
+      document.addEventListener("pointercancel", up);
     });
   }
   function load(el, n) {
