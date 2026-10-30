@@ -15,7 +15,7 @@ Live: https://yuuteng.github.io/parcel-tracker/
 - Each card shows the tracking number (linked to the carrier site), a copy button, status and days in transit, carrier, destination and parcel count, then the latest event and a collapsible event table.
 - Station names are geocoded once through Nominatim and cached in the browser. Common rail stations are hardcoded so the first paint needs no lookups.
 - Drag the handle to reorder cards. The order is remembered.
-- Shared numbers come from `numbers.json` and appear for everyone. Personal numbers live in the browser and in the URL hash (`#n=A,B,C`), so a link carries the list.
+- Shared numbers come from `numbers.json` and appear for everyone. Personal numbers are stored under a name in the Worker's KV: type a name at the top to open that list, type the same name on another device to get it back; the browser only caches it. A `#n=A,B,C` link adds those numbers to the current list and never replaces it.
 - Shared numbers can be hidden per device and restored from the header.
 - Dark and light themes follow the system. Touch devices get a map lock so the page scrolls instead of the map.
 
