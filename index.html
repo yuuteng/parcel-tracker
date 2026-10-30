@@ -50,7 +50,10 @@
   #me .arr{color:var(--mute);font-size:10px}
   #me.empty{border-color:var(--acc);color:var(--acc)}
   #me.empty .av{background:var(--line-2);color:var(--mute)}
-  .sheet{position:absolute;top:100%;right:0;margin-top:10px;width:300px;background:var(--bg);border:1px solid var(--acc);border-radius:12px;padding:14px;box-shadow:var(--pop-shadow);z-index:1100}
+  #me .arr{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+  #me[aria-expanded="true"]{border-color:var(--acc)}
+  #me[aria-expanded="true"] .arr{transform:rotate(180deg)}
+  .sheet{transform-origin:calc(100% - var(--caret,28px) - 6px) -8px;position:absolute;top:100%;right:0;margin-top:10px;width:300px;background:var(--bg);border:1px solid var(--acc);border-radius:12px;padding:14px;box-shadow:var(--pop-shadow);z-index:1100}
   .sheet::before{content:"";position:absolute;top:-7px;right:var(--caret,28px);width:12px;height:12px;background:var(--bg);border-left:1px solid var(--acc);border-top:1px solid var(--acc);transform:rotate(45deg)}
   .sheet .who .av.blank{background:var(--line-2);color:var(--mute)}
   .sheet .who{display:flex;align-items:center;gap:10px;margin-bottom:12px}
@@ -64,7 +67,7 @@
   .sheet .add{display:flex;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
   .sheet .add input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--sans)}
   .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden;font-size:11px;white-space:nowrap}
-  .seg button{padding:2px 8px;border:0;border-radius:0;background:none;color:var(--mute);font:500 11px var(--sans)}
+  .seg button{padding:2px 8px;border:0;border-radius:0;background:none;color:var(--mute);font:500 11px var(--sans);transition:background .2s,color .2s}
   .seg button.on{background:var(--acc);color:#111;font-weight:600}
   .byline{font-size:11px;color:var(--mute);white-space:nowrap}
   .byline b{color:var(--ink-2);font-weight:500}
@@ -109,7 +112,12 @@
   .card.sel{border-color:var(--acc)}
   .card.arch{opacity:.6}
   .card.arch.sel{opacity:.85}
-  .card.dragging{opacity:.55;box-shadow:0 12px 30px -12px rgba(0,0,0,.6);position:relative;z-index:5}
+  .cards{position:relative}
+  .ph{flex:none;border:1.5px dashed var(--acc);border-radius:10px;background:var(--acc-soft)}
+  .card.lift{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 24px 56px -14px rgba(0,0,0,.6);will-change:transform;cursor:grabbing}
+  body.sorting-now,body.sorting-now *{cursor:grabbing!important;user-select:none!important;-webkit-user-select:none!important}
+  .grip{transition:color .15s}
+  .grip:hover{color:var(--acc)}
   .card{cursor:pointer}
   .hd{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:11px 14px}
   .hd-l,.hd-m,.hd-r{display:flex;align-items:center;gap:6px 10px;min-width:0}
@@ -319,6 +327,19 @@
     var on = isShared(n);
     el.children[0].classList.toggle("on", !on); el.children[1].classList.toggle("on", on);
   }
+  var EASE = "cubic-bezier(.2,.8,.2,1)", sheetOpen = false, drag = null;
+  function calm() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  function enterAnim(el, i) {
+    if (calm()) return;
+    el.animate([{ opacity: 0, transform: "translateY(10px)" }, { opacity: 1, transform: "none" }], { duration: 280, delay: Math.min(i, 12) * 35, easing: EASE, fill: "backwards" });
+  }
+  function leave(el, done) {
+    if (calm()) { el.remove(); done(); return; }
+    var h = el.offsetHeight, gap = el.previousElementSibling ? "-12px" : "0px";
+    el.style.pointerEvents = "none";
+    el.animate([{ opacity: 1, transform: "none", height: h + "px", marginTop: "0px" }, { opacity: 0, transform: "translateX(24px)", height: "0px", marginTop: gap }],
+      { duration: 260, easing: EASE, fill: "forwards" }).onfinish = function () { el.remove(); done(); };
+  }
   function normName(s) { return String(s || "").normalize("NFC").replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ").toLowerCase(); }
   function fromHash(k) { var m = location.hash.match(new RegExp("[#&]" + k + "=([^&]+)")); return m ? decodeURIComponent(m[1]) : null; }
   function hashNumbers() { var v = fromHash("n"); return v ? v.split(",").map(function (x) { return x.trim().toUpperCase(); }).filter(Boolean) : []; }
@@ -374,8 +395,21 @@
       sh.style.right = phone ? "" : off + "px";
       sh.style.setProperty("--caret", Math.round(t.right - (m.left + m.width / 2) - off - 6) + "px");
     }
-    sh.hidden = !open; me.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) { $("#who").value = ""; $("#who").focus(); }
+    sheetOpen = !!open; me.setAttribute("aria-expanded", open ? "true" : "false");
+    sh.getAnimations().forEach(function (a) { a.cancel(); });
+    if (open) {
+      sh.hidden = false; $("#who").value = ""; $("#who").focus({ preventScroll: true });
+      if (!calm()) {
+        sh.animate([{ opacity: 0, transform: "translateY(-8px) scale(.96)" }, { opacity: 1, transform: "none" }], { duration: 220, easing: EASE });
+        Array.prototype.forEach.call(sh.querySelectorAll(".who, .list button, .add"), function (x, i) {
+          x.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "none" }], { duration: 240, delay: 50 + i * 35, easing: EASE, fill: "backwards" });
+        });
+      }
+    } else if (!sh.hidden) {
+      if (calm()) sh.hidden = true;
+      else sh.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-6px) scale(.97)" }], { duration: 150, easing: "ease-in" })
+        .onfinish = function () { if (!sheetOpen) sh.hidden = true; };
+    }
   }
   // Switch to a name: local cache first, then the Worker; a share link (#n=) only ever adds numbers.
   function enter(name, cb) {
@@ -779,9 +813,11 @@
       if (isPub) { if (hidden.indexOf(n) < 0) hidden.push(n); }
       else { numbers = numbers.filter(function (x) { return x !== n; }); if (sharedByMe(n)) setShared(n, false); }
       persist();
-      el.remove(); dropRoute(n);
-      if (sel === n) { var first = list.querySelector(".card"); sel = null; if (first) select(first.dataset.n); }
-      if (!list.querySelector(".card")) showEmpty(); stamp();
+      dropRoute(n);
+      leave(el, function () {
+        if (sel === n) { var first = list.querySelector(".card"); sel = null; if (first) select(first.dataset.n); }
+        if (!list.querySelector(".card")) showEmpty(); stamp();
+      });
     });
     var copy = $('[data-role="copy"]', el);
     copy.addEventListener("click", function (e) {
@@ -946,36 +982,152 @@
     persist();
   }
 
-  // ---- drag to reorder: pointer events on the grip, works with touch ----
+  // ---- drag to reorder: the card lifts and follows the pointer, the others
+  // slide out of its way, every trace folds so the list is short while sorting ----
   function enableDrag(el) {
     var grip = $(".grip", el);
     grip.addEventListener("pointerdown", function (e) {
-      if (e.button) return;
+      if (e.button || drag) return;
       e.preventDefault(); e.stopPropagation();
-      var id = e.pointerId, before = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
-      el.classList.add("dragging");
+      var id = e.pointerId, x0 = e.clientX, y0 = e.clientY, mine = null;
       function move(ev) {
         if (ev.pointerId !== id) return;
         ev.preventDefault();
-        var over = document.elementFromPoint(ev.clientX, ev.clientY);
-        var target = over && over.closest ? over.closest(".card") : null;
-        if (!target || target === el || target.parentNode !== list) return;
-        var r = target.getBoundingClientRect();
-        if (ev.clientY < r.top + r.height / 2) list.insertBefore(el, target); else list.insertBefore(el, target.nextSibling);
+        if (!mine) {
+          if (Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) < 4) return;
+          liftCard(el, x0, y0, ev.pointerType); mine = drag;
+        }
+        if (drag === mine) { drag.x = ev.clientX; drag.y = ev.clientY; }
       }
       function up(ev) {
         if (ev.pointerId !== id) return;
         document.removeEventListener("pointermove", move);
         document.removeEventListener("pointerup", up);
         document.removeEventListener("pointercancel", up);
-        el.classList.remove("dragging");
-        var after = Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; });
-        if (after.join() !== before.join()) { saveOrder(); stamp(); }
+        if (mine && drag === mine) dropCard(ev.type === "pointercancel");
       }
-      document.addEventListener("pointermove", move);
+      document.addEventListener("pointermove", move, { passive: false });
       document.addEventListener("pointerup", up);
       document.addEventListener("pointercancel", up);
     });
+  }
+  function cardOrder() { return Array.prototype.map.call(list.querySelectorAll(".card"), function (c) { return c.dataset.n; }); }
+  function fold(shut, D) {
+    Array.prototype.forEach.call(list.querySelectorAll('.card > [data-role="body"]'), function (b) {
+      b.getAnimations().forEach(function (a) { a.cancel(); });
+      if (shut) {
+        var h = b.offsetHeight;
+        b.style.overflow = "hidden"; b.style.height = "0px"; b.style.opacity = "0";
+        if (D) b.animate([{ height: h + "px", opacity: 1 }, { height: "0px", opacity: 0 }], { duration: D, easing: EASE });
+      } else {
+        b.style.height = ""; b.style.opacity = "";
+        var full = b.offsetHeight;
+        if (!D) { b.style.overflow = ""; return; }
+        b.animate([{ height: "0px", opacity: 0 }, { height: full + "px", opacity: 1 }], { duration: D, easing: EASE })
+          .onfinish = function () { b.style.overflow = ""; };
+      }
+    });
+  }
+  // Keep `node` at the same viewport y while the page height animates for `ms`.
+  function pin(node, y, ms) {
+    var end = performance.now() + ms;
+    (function step() {
+      var dy = node.getBoundingClientRect().top - y;
+      if (Math.abs(dy) > 0.5) window.scrollBy(0, dy);
+      if (performance.now() < end) requestAnimationFrame(step);
+    })();
+  }
+  function liftCard(el, x0, y0, type) {
+    var r = el.getBoundingClientRect(), D = calm() ? 0 : 220;
+    var shutH = $(".hd", el).offsetHeight + (el.offsetHeight - el.clientHeight);
+    var ph = document.createElement("div");
+    ph.className = "ph"; ph.style.height = r.height + "px";
+    var next = el.nextElementSibling;
+    drag = { el: el, ph: ph, next: next, start: cardOrder(), css: el.style.cssText, x: x0, y: y0, px: x0, vx: 0, rot: 0, s: 1,
+             gx: x0 - r.left, gy: y0 - r.top, left: r.left, top: r.top, shutH: shutH, settle: performance.now() + D + 40,
+             touch: type !== "mouse", raf: 0, dropping: false };
+    list.insertBefore(ph, el);
+    el.classList.add("lift");
+    el.style.position = "fixed"; el.style.left = r.left + "px"; el.style.top = r.top + "px"; el.style.width = r.width + "px";
+    el.style.margin = "0"; el.style.zIndex = "1200"; el.style.pointerEvents = "none";
+    el.style.transformOrigin = drag.gx + "px " + drag.gy + "px";
+    document.body.classList.add("sorting-now");
+    fold(true, D);
+    if (D) { ph.animate([{ height: r.height + "px" }, { height: shutH + "px" }], { duration: D, easing: EASE }); }
+    ph.style.height = shutH + "px";
+    if (drag.touch && navigator.vibrate) navigator.vibrate(8);
+    drag.raf = requestAnimationFrame(tick);
+  }
+  function tick(now) {
+    var d = drag; if (!d || d.dropping) return;
+    d.vx = d.vx * 0.75 + (d.x - d.px) * 0.25; d.px = d.x;
+    var want = Math.max(-5, Math.min(5, d.vx * 0.7));
+    d.rot += (want - d.rot) * 0.18; d.s += (1.025 - d.s) * 0.2;
+    d.el.style.transform = "translate(" + ((d.x - d.gx - d.left) * 0.35).toFixed(1) + "px," + (d.y - d.gy - d.top) + "px) rotate(" + d.rot.toFixed(2) + "deg) scale(" + d.s.toFixed(3) + ")";
+    if (now < d.settle) {
+      var dy = d.ph.getBoundingClientRect().top - (d.y - d.gy);
+      if (Math.abs(dy) > 0.5) window.scrollBy(0, dy);
+    } else { autoScroll(d); place(d); }
+    d.raf = requestAnimationFrame(tick);
+  }
+  function autoScroll(d) {
+    var edge = 72, h = window.innerHeight, v = 0;
+    if (d.y < edge) v = -Math.ceil((edge - d.y) / edge * 20);
+    else if (d.y > h - edge) v = Math.ceil((d.y - (h - edge)) / edge * 20);
+    if (v) window.scrollBy(0, v);
+  }
+  // Move the placeholder before `ref` and slide every card that shifted (FLIP).
+  function movePh(d, ref) {
+    var sib = Array.prototype.filter.call(list.children, function (c) { return c !== d.el && c !== d.ph && c.classList.contains("card"); });
+    var tops = new Map();
+    sib.forEach(function (c) { tops.set(c, c.getBoundingClientRect().top); c.getAnimations().forEach(function (a) { a.cancel(); }); });
+    list.insertBefore(d.ph, ref);
+    if (calm()) return;
+    sib.forEach(function (c) {
+      var dy = tops.get(c) - c.getBoundingClientRect().top;
+      if (Math.abs(dy) > 0.5) c.animate([{ transform: "translateY(" + dy + "px)" }, { transform: "none" }], { duration: 220, easing: EASE });
+    });
+  }
+  function place(d) {
+    var cy = d.y - d.gy + d.shutH / 2 - list.getBoundingClientRect().top, ref = null;
+    var sib = Array.prototype.filter.call(list.children, function (c) { return c !== d.el && c !== d.ph && c.classList.contains("card"); });
+    for (var i = 0; i < sib.length; i++) { if (cy < sib[i].offsetTop + sib[i].offsetHeight / 2) { ref = sib[i]; break; } }
+    var n = d.ph.nextSibling; while (n === d.el) n = n.nextSibling;
+    if (n === ref) return;
+    movePh(d, ref);
+    if (d.touch && navigator.vibrate) navigator.vibrate(4);
+  }
+  function dropCard(cancel) {
+    var d = drag; if (!d || d.dropping) return;
+    d.dropping = true; cancelAnimationFrame(d.raf);
+    if (cancel) { var back = d.next && d.next.parentNode === list ? d.next : null; if (back !== d.ph) movePh(d, back); }
+    var D = calm() ? 0 : 260, pr = d.ph.getBoundingClientRect();
+    function finish() {
+      d.el.getAnimations().forEach(function (a) { a.cancel(); });
+      d.el.style.cssText = d.css; d.el.classList.remove("lift");
+      list.insertBefore(d.el, d.ph); d.ph.remove();
+      document.body.classList.remove("sorting-now");
+      drag = null;
+      var top = d.el.getBoundingClientRect().top;
+      fold(false, D ? 280 : 0);
+      if (D) {
+        pin(d.el, top, 320);
+        var acc = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || "#f5a524";
+        d.el.animate([{ boxShadow: "0 0 0 3px " + acc }, { boxShadow: "0 0 0 0 transparent" }], { duration: 700, easing: "ease-out" });
+      }
+      if (!cancel && cardOrder().join() !== d.start.join()) { saveOrder(); stamp(); }
+    }
+    if (!D) { finish(); return; }
+    var to = "translate(" + (pr.left - d.left) + "px," + (pr.top - d.top) + "px) rotate(0deg) scale(1)";
+    d.el.animate([{ transform: d.el.style.transform }, { transform: to }], { duration: D, easing: EASE, fill: "forwards" }).onfinish = finish;
+  }
+  function abortDrag() {
+    var d = drag; if (!d) return;
+    cancelAnimationFrame(d.raf);
+    d.el.style.cssText = d.css; d.el.classList.remove("lift");
+    if (d.ph.parentNode) d.ph.remove();
+    document.body.classList.remove("sorting-now");
+    drag = null;
   }
   function load(el, n) {
     fetchShipment(n)
@@ -996,12 +1148,13 @@
       : whoKey ? '<div class="empty">还没有单号。在上面输入一个,回车。</div>' : '<div class="empty">先在上面输入名字,回车。</div>';
   }
   function render() {
+    if (drag) abortDrag();
     list.innerHTML = "";
     Object.keys(routes).forEach(dropRoute);
     var all = allNumbers();
     if (!all.length) { showEmpty(); stamp(); sel = null; return; }
     if (sel == null || all.indexOf(sel) < 0) sel = all[0];
-    all.forEach(function (n) { var el = shell(n, !inMine(n)); if (n === sel) el.classList.add("sel"); list.appendChild(el); load(el, n); });
+    all.forEach(function (n, i) { var el = shell(n, !inMine(n)); if (n === sel) el.classList.add("sel"); list.appendChild(el); load(el, n); enterAnim(el, i); });
     stamp();
   }
   function addCard(n) {
@@ -1011,7 +1164,7 @@
     for (var k = i + 1; k < all.length && !before; k++) before = list.querySelector(".card[data-n=\"" + all[k] + "\"]");
     list.insertBefore(el, before);
     if (sel == null) { sel = n; el.classList.add("sel"); }
-    load(el, n);
+    load(el, n); enterAnim(el, 0);
   }
   function stamp() {
     var d = new Date(), p = function (x) { return (x < 10 ? "0" : "") + x; };
@@ -1046,10 +1199,13 @@
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
   $("#refresh").addEventListener("click", function () { loadShips(); loadShared().then(function () { if (whoKey) enter(who, render); else render(); }); });
   $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); var v = $("#who").value; if (normName(v)) { openSheet(false); enter(v, render); } });
-  $("#me").addEventListener("click", function () { openSheet($("#sheet").hidden); });
+  $("#me").addEventListener("click", function () { openSheet(!sheetOpen); });
   $("#sheet-list").addEventListener("click", function (e) { var b = e.target.closest("button[data-name]"); if (!b) return; openSheet(false); enter(b.dataset.name, render); });
-  document.addEventListener("click", function (e) { if (!$("#sheet").hidden && !e.target.closest("#sheet, #me")) openSheet(false); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !$("#sheet").hidden) openSheet(false); });
+  document.addEventListener("click", function (e) { if (sheetOpen && !e.target.closest("#sheet, #me")) openSheet(false); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (drag) dropCard(true); else if (sheetOpen) openSheet(false);
+  });
   window.addEventListener("hashchange", function () { var u = fromHash("u"); if (u && normName(u) !== whoKey) enter(u, render); else if (hashNumbers().length && whoKey) enter(who, render); });
   window.addEventListener("resize", function () { map.invalidateSize(); });
   if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { Object.keys(routes).forEach(paintRoute); });
