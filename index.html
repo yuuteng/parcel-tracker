@@ -1046,12 +1046,14 @@
   }
   function liftCard(el, x0, y0, type) {
     var r = el.getBoundingClientRect(), D = calm() ? 0 : 220;
-    var shutH = $(".hd", el).offsetHeight + (el.offsetHeight - el.clientHeight);
+    // Fold the traces only for touch / narrow screens; with a mouse the whole card moves and the page height never changes.
+    var folds = type !== "mouse" || window.matchMedia("(max-width:760px)").matches;
+    var shutH = folds ? $(".hd", el).offsetHeight + (el.offsetHeight - el.clientHeight) : r.height;
     var ph = document.createElement("div");
     ph.className = "ph"; ph.style.height = r.height + "px";
     var next = el.nextElementSibling;
     drag = { el: el, ph: ph, next: next, start: cardOrder(), css: el.style.cssText, x: x0, y: y0, px: x0, vx: 0, rot: 0, s: 1,
-             gx: x0 - r.left, gy: y0 - r.top, left: r.left, top: r.top, shutH: shutH, settle: performance.now() + D + 40,
+             gx: x0 - r.left, gy: y0 - r.top, left: r.left, top: r.top, shutH: shutH, folds: folds, settle: folds ? performance.now() + D + 40 : 0,
              touch: type !== "mouse", raf: 0, dropping: false };
     list.insertBefore(ph, el);
     el.classList.add("lift");
@@ -1059,17 +1061,19 @@
     el.style.margin = "0"; el.style.zIndex = "1200"; el.style.pointerEvents = "none";
     el.style.transformOrigin = drag.gx + "px " + drag.gy + "px";
     document.body.classList.add("sorting-now");
-    fold(true, D);
-    if (D) { ph.animate([{ height: r.height + "px" }, { height: shutH + "px" }], { duration: D, easing: EASE }); }
-    ph.style.height = shutH + "px";
+    if (folds) {
+      fold(true, D);
+      if (D) ph.animate([{ height: r.height + "px" }, { height: shutH + "px" }], { duration: D, easing: EASE });
+      ph.style.height = shutH + "px";
+    }
     if (drag.touch && navigator.vibrate) navigator.vibrate(8);
     drag.raf = requestAnimationFrame(tick);
   }
   function tick(now) {
     var d = drag; if (!d || d.dropping) return;
     d.vx = d.vx * 0.75 + (d.x - d.px) * 0.25; d.px = d.x;
-    var want = Math.max(-5, Math.min(5, d.vx * 0.7));
-    d.rot += (want - d.rot) * 0.18; d.s += (1.025 - d.s) * 0.2;
+    var lim = d.folds ? 5 : 1.2, want = Math.max(-lim, Math.min(lim, d.vx * (d.folds ? 0.7 : 0.2)));
+    d.rot += (want - d.rot) * 0.18; d.s += ((d.folds ? 1.025 : 1.012) - d.s) * 0.2;
     d.el.style.transform = "translate(" + ((d.x - d.gx - d.left) * 0.35).toFixed(1) + "px," + (d.y - d.gy - d.top) + "px) rotate(" + d.rot.toFixed(2) + "deg) scale(" + d.s.toFixed(3) + ")";
     if (now < d.settle) {
       var dy = d.ph.getBoundingClientRect().top - (d.y - d.gy);
@@ -1115,10 +1119,8 @@
       list.insertBefore(d.el, d.ph); d.ph.remove();
       document.body.classList.remove("sorting-now");
       drag = null;
-      var top = d.el.getBoundingClientRect().top;
-      fold(false, D ? 280 : 0);
+      if (d.folds) { var top = d.el.getBoundingClientRect().top; fold(false, D ? 280 : 0); if (D) pin(d.el, top, 320); }
       if (D) {
-        pin(d.el, top, 320);
         var acc = getComputedStyle(document.documentElement).getPropertyValue("--acc").trim() || "#f5a524";
         d.el.animate([{ boxShadow: "0 0 0 3px " + acc }, { boxShadow: "0 0 0 0 transparent" }], { duration: 700, easing: "ease-out" });
       }
