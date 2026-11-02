@@ -757,6 +757,19 @@
     }
     r.bounds = bounds;
   }
+  // Any open popup is kept fully inside the map, clear of the zoom buttons, after every move or reframe.
+  function keepPopup() {
+    var pp = map._popup;
+    if (!pp || !map.hasLayer(pp) || !pp._container) return;
+    var m = map.getContainer().getBoundingClientRect(), r = pp._container.getBoundingClientRect();
+    var ctl = map.getContainer().querySelector(".leaflet-top.leaflet-right .leaflet-control");
+    var L0 = m.left + 54, R0 = m.right - 10, T0 = (ctl ? ctl.getBoundingClientRect().bottom : m.top) + 8, B0 = m.bottom - 34, dx = 0, dy = 0;
+    if (r.width < R0 - L0) { if (r.left < L0) dx = r.left - L0; else if (r.right > R0) dx = r.right - R0; }
+    if (r.top < T0) dy = r.top - T0; else if (r.bottom > B0) dy = r.bottom - B0;
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) map.panBy([dx, dy], { animate: !calm(), duration: .35 });
+  }
+  map.on("popupopen", function () { requestAnimationFrame(keepPopup); });
+  map.on("moveend", function () { requestAnimationFrame(keepPopup); });
   function focusRoute(n, openPopup) {
     var r = routes[n]; if (!r || !r.bounds) return;
     var b = r.bounds, hasArea = b.getNorth() !== b.getSouth() || b.getEast() !== b.getWest();
@@ -1253,7 +1266,9 @@
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
   $("#refresh").addEventListener("click", refreshAll);
-  $("#refresh").addEventListener("mouseenter", stamp);
+  $("#refresh").addEventListener("pointerenter", function (e) {
+    if (e.pointerType === "mouse") this.title = offline ? "未同步到云端,点击重试" : ago(lastFetch) + ",点击刷新";
+  });
   $("#who-form").addEventListener("submit", function (e) { e.preventDefault(); var v = $("#who").value; if (normName(v)) { openSheet(false); enter(v, render); } });
   $("#me").addEventListener("click", function () { openSheet(!sheetOpen); });
   $("#sheet-list").addEventListener("click", function (e) { var b = e.target.closest("button[data-name]"); if (!b) return; openSheet(false); enter(b.dataset.name, render); });
