@@ -689,6 +689,10 @@
   var map = L.map("map", { zoomControl: true, attributionControl: true, scrollWheelZoom: true, dragging: !TOUCH, worldCopyJump: false, zoomSnap: .5 });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "&copy; OpenStreetMap" }).addTo(map);
   map.setView([40, 60], 3);
+  function popOpts() {
+    var w = map.getSize().x;
+    return { autoPan: true, autoPanPaddingTopLeft: L.point(52, 12), autoPanPaddingBottomRight: L.point(12, 36), maxWidth: Math.max(160, Math.min(260, w - 80)) };
+  }
   if (TOUCH) {
     var Lock = L.Control.extend({ onAdd: function () {
       var bar = L.DomUtil.create("div", "leaflet-bar"), a = L.DomUtil.create("a", "maplock", bar);
@@ -726,7 +730,7 @@
       var last = i === sorted.length - 1 && !shipLL;
       var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
                                       : { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer);
-      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), { autoPan: false });
+      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), popOpts());
       if (!last) m.bindTooltip(p.place);
       if (last) r.here = m;
     });
@@ -739,7 +743,7 @@
       var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
       sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
         esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : "")].filter(Boolean).join(" · ")) +
-        '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', { autoPan: false });
+        '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', popOpts());
       r.here = sm;
       bounds.extend(shipLL);
       if (sh.ahead && sh.ahead.length) L.polyline([shipLL].concat(sh.ahead), { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
@@ -756,8 +760,10 @@
   function focusRoute(n, openPopup) {
     var r = routes[n]; if (!r || !r.bounds) return;
     var b = r.bounds, hasArea = b.getNorth() !== b.getSouth() || b.getEast() !== b.getWest();
+    var want = openPopup && r.here && !r.pending, done = false;
+    function pop() { if (done || !want || sel !== n) return; done = true; var pp = r.here.getPopup(); if (pp) L.setOptions(pp, popOpts()); r.here.openPopup(); }
+    if (want) { map.once("moveend", pop); setTimeout(pop, 700); }
     if (hasArea) map.fitBounds(b.pad(.25), { maxZoom: 7 }); else map.setView(b.getCenter(), 6);
-    if (openPopup && r.here && !r.pending) r.here.openPopup();
   }
   function geoStatus() {
     var pending = 0, miss = 0;
@@ -1239,6 +1245,10 @@
     if (fresh.length) { fresh.forEach(function (n) { var c = list.querySelector('.card[data-n="' + n + '"]'); if (c) { c.remove(); dropRoute(n); } }); }
     $("#input").value = ""; persist();
     fresh.forEach(addCard); stamp();
+    if (fresh.length) {
+      var el = list.querySelector('.card[data-n="' + fresh[0] + '"]');
+      if (el) { select(fresh[0]); el.scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "nearest" }); }
+    }
   }
   $("#add").addEventListener("click", add);
   $("#input").addEventListener("keydown", function (e) { if (e.key === "Enter") add(); });
