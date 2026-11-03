@@ -310,10 +310,20 @@
       if (!m) continue;
       var toks = m[1].trim().split(/\s+/);
       while (toks.length > 1 && /\d/.test(toks[toks.length - 1])) toks.pop();
-      for (var j = 0; j < i; j++) if (LANDED_RE.test(traces[j].info || "")) return null;
-      return toks.join(" ").toUpperCase();
+      var landed = null;
+      for (var j = 0; j < i; j++) if (LANDED_RE.test(traces[j].info || "")) landed = traces[j].time;
+      return { name: toks.join(" ").toUpperCase(), landed: landed };
     }
     return null;
+  }
+  // After the goods are landed the vessel stays at the port call of that time, even once it sails on.
+  function atLanding(v, landed) {
+    if (!v || !landed) return v;
+    var t = parseTime(landed), calls = v.calls || [], call = null;
+    calls.forEach(function (c) { if (!call || new Date(c.time) <= new Date(+t + 3 * 86400000)) call = c; });
+    if (!call && !v.inPort) return null;
+    return Object.assign({}, v, call ? { lat: call.lat, lon: call.lon, time: call.time, dest: call.dest, path: call.path } : {},
+      { ahead: [], inPort: true, landed: true, sog: null });
   }
   function loadShared() {
     return fetch(WORKER_URL + "/shared", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
@@ -738,9 +748,9 @@
       var past = sh.path && sh.path.length ? sh.path : (sh.track || []).map(function (t) { return [t[0], t[1]]; });
       var sea = (line.length ? [line[line.length - 1]] : []).concat(past, [shipLL]);
       L.polyline(sea, { color: acc, weight: dim ? 1.5 : 2, opacity: op * .8 }).addTo(r.layer);
-      var icon = L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
-        html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' });
-      var sm = L.marker(shipLL, { icon: icon, zIndexOffset: 1000 }).addTo(r.layer);
+      var sm = sh.landed ? L.circleMarker(shipLL, { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }).addTo(r.layer)
+        : L.marker(shipLL, { zIndexOffset: 1000, icon: L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
+          html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' }) }).addTo(r.layer);
       sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
         esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : "")].filter(Boolean).join(" · ")) +
         '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', popOpts());
@@ -926,7 +936,7 @@
     });
     buildRoute(n, s, traces);
     var vessel = vesselOf(traces, isDel);
-    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel, by[vessel]); });
+    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed)); });
   }
   function fmtUtc(t) {
     var d = t ? new Date(t) : null, p = function (x) { return (x < 10 ? "0" : "") + x; };
@@ -943,7 +953,7 @@
       if (has && v.dest && !/FOR ORDERS/i.test(v.dest)) bits.push("开往 " + v.dest);
       if (has && v.eta) bits.push("预计 " + fmtUtc(v.eta).slice(0, 5) + " 到港");
     }
-    var html = '<div class="now"><span class="txt"><i class="here ship"></i><b>' + esc(v && v.name || name) + '</b>' +
+    var html = '<div class="now"><span class="txt"><i class="here' + (v && v.landed ? '' : ' ship') + '"></i><b>' + esc(v && v.name || name) + '</b>' +
       (bits.length ? ' · ' + esc(bits.join(" · ")) : (has ? '' : ' · 暂无船位')) +
       (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
       '<a class="km" href="' + esc(link) + '" target="_blank" rel="noopener">船位 ↗</a></div>';

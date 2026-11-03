@@ -6,6 +6,7 @@ pages give whole-degree positions at sea plus speed, course, destination, ETA.
 searoute turns the fixes into a path along shipping lanes: `path` from the
 vessel's `from` port through every fix, `ahead` from the latest fix to the port in
 its AIS destination (or to `toward` when that port is unknown), empty once in port.
+`calls` keeps the last port calls (port, position, first time seen in port, path so far).
 Usage: AISSTREAM_KEY=... scripts/ships.py vessels.json ships.json
 """
 import asyncio
@@ -20,6 +21,7 @@ from datetime import datetime, timezone
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
 LISTEN_S = 240  # moored ships report every 3 min; 60 s missed them
 TRACK_MAX = 300
+CALLS_MAX = 5
 STALE_EXACT_S = 6 * 3600
 IN_PORT_KM = 100
 PORTS = {
@@ -172,7 +174,8 @@ def main(vessels_path, out_path):
                "dest": vf.get("dest") or old.get("dest"), "eta": vf.get("eta") or old.get("eta"),
                "lastPort": vf.get("lastPort") or old.get("lastPort"),
                "link": f"https://www.vesselfinder.com/vessels/details/{imo}",
-               "exact": exact, "track": old.get("track", []), "inPort": in_port}
+               "exact": exact, "track": old.get("track", []), "inPort": in_port,
+               "calls": old.get("calls", [])}
         if pos:
             rec.update(lat=pos["lat"], lon=pos["lon"], time=pos["time"], approx=pos["approx"], source=pos["source"])
             pt = [pos["lat"], pos["lon"], pos["time"], 1 if pos["approx"] else 0]
@@ -188,6 +191,9 @@ def main(vessels_path, out_path):
                 rec["ahead"] = sea([here, v["toward"]]) if v.get("toward") else []
             if v.get("toward"):
                 rec["toward"] = v["toward"]
+            if in_port and (not rec["calls"] or rec["calls"][-1]["dest"] != rec["dest"] or not old.get("inPort")):
+                call = {"dest": rec["dest"], "lat": rec["lat"], "lon": rec["lon"], "time": rec["time"], "path": rec["path"]}
+                rec["calls"] = (rec["calls"] + [call])[-CALLS_MAX:]
         result[mmsi] = rec
         print(f"{name}: {rec.get('source')} {rec.get('lat')},{rec.get('lon')} sog={rec.get('sog')} dest={rec.get('dest')} track={len(rec['track'])}")
     json.dump({"updated": iso(time.time()), "vessels": result}, open(out_path, "w"), ensure_ascii=False, indent=1)
