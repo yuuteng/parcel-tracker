@@ -767,8 +767,10 @@
     }
     r.bounds = bounds;
   }
-  // Any open popup is kept fully inside the map, clear of the zoom buttons, after every move or reframe.
+  // A newly opened popup is kept inside the map, clear of the zoom buttons, until the reframe settles or the user moves the map.
+  var keepUntil = 0;
   function keepPopup() {
+    if (Date.now() > keepUntil) return;
     var pp = map._popup;
     if (!pp || !map.hasLayer(pp) || !pp._container) return;
     var m = map.getContainer().getBoundingClientRect(), r = pp._container.getBoundingClientRect();
@@ -778,8 +780,12 @@
     if (r.top < T0) dy = r.top - T0; else if (r.bottom > B0) dy = r.bottom - B0;
     if (Math.abs(dx) > 1 || Math.abs(dy) > 1) map.panBy([dx, dy], { animate: !calm(), duration: .35 });
   }
-  map.on("popupopen", function () { requestAnimationFrame(keepPopup); });
+  map.on("popupopen", function () { keepUntil = Date.now() + 1500; requestAnimationFrame(keepPopup); });
   map.on("moveend", function () { requestAnimationFrame(keepPopup); });
+  map.on("dragstart", function () { keepUntil = 0; });
+  map.getContainer().addEventListener("wheel", function () { keepUntil = 0; }, { passive: true });
+  map.getContainer().addEventListener("touchstart", function (e) { if (e.touches.length > 1) keepUntil = 0; }, { passive: true });
+  map.zoomControl && map.zoomControl.getContainer().addEventListener("click", function () { keepUntil = 0; });
   function focusRoute(n, openPopup) {
     var r = routes[n]; if (!r || !r.bounds) return;
     var b = r.bounds, hasArea = b.getNorth() !== b.getSouth() || b.getEast() !== b.getWest();
