@@ -162,6 +162,7 @@
   .ev{display:grid;grid-template-columns:9.6em minmax(0,1fr);gap:0 10px;padding:7px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
   .ev-t{white-space:nowrap;font:12px/1.6 var(--mono);color:var(--mute)}
   .ev-x{overflow-wrap:anywhere;min-width:0}
+  .ev-p{color:var(--mute)}
   .ev.head{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:600}
   .ev.head .ev-t{font:600 10.5px/1.6 var(--sans);letter-spacing:.1em}
   .ev.cur{color:var(--ink)} .ev.cur .ev-t{color:var(--here);font-weight:600}
@@ -316,14 +317,14 @@
     }
     return null;
   }
-  // After the goods are landed the vessel stays at the port call of that time, even once it sails on.
+  // After the goods are landed the vessel stays at the port call closest to the landing, even once it sails on.
   function atLanding(v, landed) {
     if (!v || !landed) return v;
-    var t = parseTime(landed), calls = v.calls || [], call = null;
-    calls.forEach(function (c) { if (!call || new Date(c.time) <= new Date(+t + 3 * 86400000)) call = c; });
+    var t = +parseTime(landed), call = null, best = Infinity;
+    (v.calls || []).forEach(function (c) { var d = Math.abs(new Date(c.time) - t); if (d < best) { best = d; call = c; } });
     if (!call && !v.inPort) return null;
     return Object.assign({}, v, call ? { lat: call.lat, lon: call.lon, time: call.time, dest: call.dest, path: call.path } : {},
-      { ahead: [], inPort: true, landed: true, sog: null });
+      { ahead: [], inPort: true, landed: true, sog: null, lastPort: null });
   }
   function loadShared() {
     return fetch(WORKER_URL + "/shared", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
@@ -585,6 +586,13 @@
     if (!p || /^[A-Z]{2,3}$/.test(p) || /^[\d\s.-]+$/.test(p)) return null;
     return p;
   }
+  function showPlace(p) { return String(p).replace(/\s*,\s*/g, ", "); }
+  // The carrier's own location field, unless the event text already names it.
+  function placeTag(t) {
+    var p = t.place ? normPlace(t.place) : null;
+    if (!p || String(t.info || "").toUpperCase().indexOf(p.split(",")[0].trim().toUpperCase()) >= 0) return "";
+    return '<span class="ev-p"> · ' + esc(showPlace(p)) + '</span>';
+  }
   function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
   // "距离布列斯特 1245 km" counts down to the rail terminus; an arrival event
   // without a station name is placed there.
@@ -731,36 +739,43 @@
     });
     var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
     sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
-    var line = sorted.map(function (p) { return p.ll; });
     var sh = r.ship, shipLL = sh ? [sh.lat, sh.lon] : null;
-    if (!line.length && !r.dest && !shipLL) { r.bounds = null; return; }
-    var bounds = L.latLngBounds(line.length ? line : [r.dest || shipLL]);
+    // Stops before boarding lead into the sea leg; stops after landing continue from the port of discharge.
+    var split = shipLL && sh.landed && r.boardIdx != null;
+    var pre = split ? sorted.filter(function (p) { return p.i < r.boardIdx; }) : sorted;
+    var post = split ? sorted.filter(function (p) { return p.i > r.boardIdx; }) : [];
+    var line = pre.map(function (p) { return p.ll; }), after = post.map(function (p) { return p.ll; });
+    var endLL = after.length ? after[after.length - 1] : null, all = line.concat(after);
+    if (!all.length && !r.dest && !shipLL) { r.bounds = null; return; }
+    var bounds = L.latLngBounds(all.length ? all : [r.dest || shipLL]);
     if (line.length > 1) L.polyline(line, { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
-    sorted.forEach(function (p, i) {
-      var last = i === sorted.length - 1 && !shipLL;
+    if (after.length) L.polyline([shipLL].concat(after), { color: acc, weight: dim ? 2 : 3, opacity: op * .9 }).addTo(r.layer);
+    pre.concat(post).forEach(function (p, i, stops) {
+      var last = i === stops.length - 1 && (!shipLL || !!endLL);
       var m = L.circleMarker(p.ll, last ? { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }
                                       : { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer);
-      m.bindPopup('<b>' + esc(p.place) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), popOpts());
-      if (!last) m.bindTooltip(p.place);
+      m.bindPopup('<b>' + esc(showPlace(p.place)) + '</b><span class="mono">' + esc(p.t.time) + '</span>' + esc(p.t.info), popOpts());
+      if (!last) m.bindTooltip(showPlace(p.place));
       if (last) r.here = m;
     });
     if (shipLL) {
       var past = sh.path && sh.path.length ? sh.path : (sh.track || []).map(function (t) { return [t[0], t[1]]; });
       var sea = (line.length ? [line[line.length - 1]] : []).concat(past, [shipLL]);
       L.polyline(sea, { color: acc, weight: dim ? 1.5 : 2, opacity: op * .8 }).addTo(r.layer);
-      var sm = sh.landed ? L.circleMarker(shipLL, { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }).addTo(r.layer)
+      var sm = endLL ? L.circleMarker(shipLL, { radius: 3.5, color: acc, fillColor: acc, fillOpacity: op, opacity: op, weight: 1 }).addTo(r.layer)
+        : sh.landed ? L.circleMarker(shipLL, { radius: dim ? 6 : 8, color: ring, fillColor: here, fillOpacity: op, opacity: op, weight: 3 }).addTo(r.layer)
         : L.marker(shipLL, { zIndexOffset: 1000, icon: L.divIcon({ className: "ship-ic", iconSize: [26, 26], iconAnchor: [13, 13],
           html: '<svg viewBox="0 0 24 24" width="26" height="26" style="transform:rotate(' + (sh.cog || 0) + 'deg);opacity:' + op + '"><path d="M12 2 L18 20 L12 16.5 L6 20 Z" fill="' + here + '" stroke="' + ring + '" stroke-width="1.6" stroke-linejoin="round"/></svg>' }) }).addTo(r.layer);
       sm.bindPopup('<b>' + esc(sh.name) + '</b><span class="mono">' + esc(fmtUtc(sh.time)) + '</span>' +
         esc([sh.sog != null ? sh.sog + " 节" : "", sh.lastPort ? "上一港 " + sh.lastPort : "", sh.inPort ? "已到港 " + (sh.dest || "") : (sh.eta ? "预计 " + fmtUtc(sh.eta).slice(0, 5) + " 到港" : "")].filter(Boolean).join(" · ")) +
         '<br><a href="' + esc(sh.link) + '" target="_blank" rel="noopener">VesselFinder ↗</a>', popOpts());
-      r.here = sm;
+      if (!endLL) r.here = sm;
       bounds.extend(shipLL);
       if (sh.ahead && sh.ahead.length) L.polyline([shipLL].concat(sh.ahead), { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
     }
     var dest = r.dest || (sh && sh.toward) || null;
     if (dest) {
-      var from = shipLL ? (sh.ahead && sh.ahead.length ? sh.ahead[sh.ahead.length - 1] : shipLL) : line[line.length - 1];
+      var from = endLL || (shipLL ? (sh.ahead && sh.ahead.length ? sh.ahead[sh.ahead.length - 1] : shipLL) : line[line.length - 1]);
       if (from) L.polyline([from, dest], { color: acc, weight: 1.5, dashArray: "4 7", opacity: op * .8 }).addTo(r.layer);
       L.circleMarker(dest, { radius: 6, color: acc, fillColor: "transparent", fillOpacity: 0, weight: 2, opacity: op }).addTo(r.layer).bindTooltip("目的地" + (r.dest && r.destName ? " " + r.destName : ""));
       bounds.extend(dest);
@@ -812,6 +827,8 @@
       });
     }
     var ref = refCityOf(traces);
+    r.boardIdx = null;
+    ordered.forEach(function (t, i) { if (r.boardIdx == null && VESSEL_RE.test(t.info || "")) r.boardIdx = i; });
     ordered.forEach(function (t, i) {
       var loc = locOf(t, ref); if (!loc) return;
       r.total++; r.pending++;
@@ -922,14 +939,14 @@
     if (lp && /,\s*[A-Z]{2}$/.test(lp)) lTxt = lTxt.replace(/\s*,\s*[^,]+,\s*[A-Z]{2}\s*$/, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
     var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' +
-      (lp ? '<i class="here"></i><b>' + esc(lp) + '</b>' : '') +
+      (lp ? '<i class="here"></i><b>' + esc(showPlace(lp)) + '</b>' : '') +
       (lp && lTxt ? ' · ' : '') + esc(lTxt) +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' +
       (lk ? '<span class="km">距' + esc(lk.ref) + ' ' + lk.km + ' km</span>' : '') + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var loc = locOf(t, ref), p = loc ? loc.place : null, tm = String(t.time || "");
       return '<div class="ev' + (i === 0 ? ' cur' : '') + '"><span class="ev-t"><span class="ev-y">' + esc(tm.slice(0, 5)) + '</span>' + esc(tm.slice(5, 16)) + '</span>' +
-        '<span class="ev-x"><i class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></i>' + esc(t.info) + '</span></div>';
+        '<span class="ev-x"><i class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></i>' + esc(t.info) + placeTag(t) + '</span></div>';
     }).join("");
     var LIMIT = 6;
     var more = traces.length > LIMIT ? '<button type="button" class="more" data-role="more">展开全部 ' + traces.length + ' 条</button>' : '';
@@ -942,13 +959,16 @@
     });
     buildRoute(n, s, traces);
     var vessel = vesselOf(traces, isDel);
-    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed)); });
+    var landedT = vessel && vessel.landed ? +parseTime(vessel.landed) : null;
+    var onLand = landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && locOf(t, ref); });
+    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed), onLand); });
   }
   function fmtUtc(t) {
     var d = t ? new Date(t) : null, p = function (x) { return (x < 10 ? "0" : "") + x; };
     return d && !isNaN(d) ? p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) : "";
   }
-  function applyShip(el, n, name, v) {
+  function applyShip(el, n, name, v, onLand) {
+    if (onLand) { if (v && v.lat != null && routes[n]) { routes[n].ship = v; paintRoute(n); } return; }
     var body = $('[data-role="body"]', el), old = $(".now", body);
     var has = v && v.lat != null;
     var link = v && v.link || "https://www.vesselfinder.com/vessels?name=" + encodeURIComponent(name);

@@ -7,6 +7,7 @@ searoute turns the fixes into a path along shipping lanes: `path` from the
 vessel's `from` port through every fix, `ahead` from the latest fix to the port in
 its AIS destination (or to `toward` when that port is unknown), empty once in port.
 `calls` keeps the last port calls (port, position, first time seen in port, path so far).
+A vessel with `landed` (YYYY-MM-DD) is no longer fetched: its record stays at the last call on or before that day.
 Usage: AISSTREAM_KEY=... scripts/ships.py vessels.json ships.json
 """
 import asyncio
@@ -82,6 +83,16 @@ def km(a, b):
     return 6371 * 2 * asin(sqrt(h))
 
 
+def landed_at(rec, day):
+    calls = [c for c in rec.get("calls", []) if c["time"][:10] <= day]
+    if not calls:
+        return rec
+    c = calls[-1]
+    track = [t for t in rec.get("track", []) if str(t[2]) <= c["time"]]
+    return dict(rec, calls=calls, track=track, lat=c["lat"], lon=c["lon"], time=c["time"], dest=c["dest"], path=c["path"],
+                ahead=[], inPort=True, sog=0, eta=None, lastPort=None)
+
+
 def first(*vals):
     return next((v for v in vals if v is not None), None)
 
@@ -146,11 +157,17 @@ def main(vessels_path, out_path):
     except (OSError, ValueError):
         prev = {}
     key = os.environ.get("AISSTREAM_KEY")
-    fixes = asyncio.run(ais_fixes(key, [v["mmsi"] for v in vessels.values()])) if key else {}
+    live = {name: v for name, v in vessels.items() if not v.get("landed")}
+    fixes = asyncio.run(ais_fixes(key, [v["mmsi"] for v in live.values()])) if key and live else {}
     result = {}
     for name, v in vessels.items():
         mmsi, imo = v["mmsi"], v["imo"]
         old = prev.get(mmsi, {})
+        if v.get("landed"):
+            if old:
+                result[mmsi] = landed_at(old, v["landed"])
+                print(f"{name}: landed {v['landed']}, kept at {result[mmsi].get('dest')}")
+            continue
         vf = vesselfinder(mmsi, imo)
         exact = fixes.get(mmsi) or old.get("exact")
         vf_t = epoch(vf.get("time"))
