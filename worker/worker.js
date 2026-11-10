@@ -119,9 +119,12 @@ function normName(s) {
 function cleanState(s, name) {
   const nums = x => Array.isArray(x) ? [...new Set(x.map(v => String(v).trim().toUpperCase()).filter(v => NUM_RE.test(v)))].slice(0, LIST_MAX) : [];
   const out = { name: String((s && s.name) || name || "").normalize("NFC").trim().replace(/\s+/g, " ").slice(0, NAME_MAX),
-                numbers: nums(s && s.numbers), hidden: nums(s && s.hidden), delivered: {}, order: nums(s && s.order), updated: 0 };
+                numbers: nums(s && s.numbers), hidden: nums(s && s.hidden), delivered: {}, order: nums(s && s.order), links: {}, updated: 0 };
   const d = (s && s.delivered) || {};
   for (const k of Object.keys(d)) { const K = String(k).toUpperCase(), t = +d[k]; if (NUM_RE.test(K) && t > 0) out.delivered[K] = t; }
+  out.links = {};
+  const l = (s && s.links) || {};
+  for (const k of Object.keys(l).slice(0, LIST_MAX)) { const K = String(k).toUpperCase(), V = String(l[k]).trim().toUpperCase(); if (NUM_RE.test(K) && NUM_RE.test(V)) out.links[K] = V; }
   return out;
 }
 async function handleList(req, env, url, cors) {
@@ -142,6 +145,7 @@ async function handleList(req, env, url, cors) {
     next.hidden = uniq(next.hidden.concat(old.hidden || []));
     for (const k of Object.keys(old.delivered || {})) if (!(next.delivered[k] > old.delivered[k])) next.delivered[k] = old.delivered[k];
     next.order = uniq(next.order.concat(old.order || []));
+    for (const k of Object.keys(old.links || {})) if (!(k in next.links)) next.links[k] = old.links[k];
   }
   next.updated = Date.now();
   await env.LISTS.put(kv, JSON.stringify(next));

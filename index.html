@@ -136,7 +136,7 @@
   .num{font:600 15px var(--mono);letter-spacing:.01em;color:var(--ink)}
   a.num{color:var(--acc);text-decoration:none;border-bottom:1px dashed var(--acc)}
   a.num:hover{border-bottom-style:solid}
-  button.copy{padding:2px 9px;font-size:11.5px;border-radius:999px;color:var(--acc);border-color:var(--acc);margin-left:-4px;background:transparent}
+  button.copy{flex:none;white-space:nowrap;padding:2px 9px;font-size:11.5px;border-radius:999px;color:var(--acc);border-color:var(--acc);margin-left:-4px;background:transparent}
   button.copy:hover{background:var(--acc-soft)}
   .chip{font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--acc-soft);color:var(--ink-2);white-space:nowrap}
   .st{display:inline-flex;align-items:center;gap:6px}
@@ -144,6 +144,21 @@
   .chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.pick{color:var(--pick)}
   .meta{font:12.5px var(--mono);color:var(--mute);min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .spacer{flex:1}
+  .lk{flex-basis:100%;display:flex;align-items:center;gap:8px;min-width:0;margin:-3px 0 0 22px;font:12.5px var(--mono);color:var(--mute)}
+  .card:not(.sel) .lk.none{display:none}
+  .lk-c{font:600 10.5px var(--sans);letter-spacing:.06em;color:var(--mute)}
+  .lk-n{color:var(--ink-2);text-decoration:none;border-bottom:1px dashed var(--line-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lk-n:hover{color:var(--acc);border-bottom-color:var(--acc)}
+  .lk .copy{padding:1px 8px;font-size:11px;margin-left:0;color:var(--mute);border-color:var(--line-2)}
+  .lk .copy:hover{color:var(--acc);border-color:var(--acc)}
+  .lk-x{border:none;background:none;color:var(--mute);font-size:15px;line-height:1;padding:0 2px;opacity:0;transition:opacity .15s}
+  .card:hover .lk-x,.card.sel .lk-x,.lk-x:focus-visible{opacity:1}
+  .lk-x:hover{color:var(--bad)}
+  .lk-add{border:1px dashed var(--line-2);background:none;color:var(--mute);font:11.5px var(--sans);padding:1px 9px;border-radius:999px;animation:lkIn .2s ease-out}
+  .lk-add:hover{color:var(--acc);border-color:var(--acc)}
+  .lk-in{font:12.5px var(--mono);width:14em;max-width:100%;padding:2px 8px;border:1px solid var(--acc);border-radius:6px;background:var(--panel);color:var(--ink);outline:none;animation:lkIn .2s ease-out}
+  @keyframes lkIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.lk-add,.lk-in{animation:none}}
   .tag{font-size:11px;color:var(--mute);border:1px solid var(--line-2);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:0 4px}
   .del:hover{color:var(--bad);border-color:transparent}
@@ -185,6 +200,8 @@
     .hd-l{grid-column:1;flex-wrap:nowrap}
     .hd-r{grid-column:2;grid-row:1;margin-left:0}
     .hd-m{grid-column:1/-1;gap:6px 8px}
+    .lk{grid-column:1/-1;grid-row:2;margin:-2px 0 0 16px}
+    .lk-x{opacity:1}
     .hd-m .meta{flex-basis:100%;white-space:normal;font-size:12px}
     .num{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .grip{padding:2px 0}
@@ -364,10 +381,12 @@
   var who = "", whoKey = "", base = 0, numbers = [], hidden = [], order = [], showArchived = false, offline = false, saveT = null, lastSaved = "";
   // number → delivery time (ms); parcels delivered over ARCHIVE_DAYS ago are archived and not fetched
   var delivered = {};
+  // number → linked last-mile number, entered by hand
+  var links = {};
   function isArchived(n) { return !!delivered[n] && Date.now() - delivered[n] > ARCHIVE_DAYS * 86400000; }
-  function setState(st) { numbers = st.numbers || []; hidden = st.hidden || []; order = st.order || []; delivered = st.delivered || {}; base = st.updated || 0; }
-  function snapshot() { return JSON.stringify([who, numbers, hidden, delivered, order]); }
-  function cacheState(dirty) { store(STATE_KEY + whoKey, { name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, updated: base, dirty: !!dirty }); }
+  function setState(st) { numbers = st.numbers || []; hidden = st.hidden || []; order = st.order || []; delivered = st.delivered || {}; links = st.links || {}; base = st.updated || 0; }
+  function snapshot() { return JSON.stringify([who, numbers, hidden, delivered, order, links]); }
+  function cacheState(dirty) { store(STATE_KEY + whoKey, { name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, links: links, updated: base, dirty: !!dirty }); }
   function persist() {
     if (!whoKey) return;
     history.replaceState(null, "", location.pathname + location.search + "#u=" + encodeURIComponent(who));
@@ -378,13 +397,13 @@
     saveT = setTimeout(function () {
       var mine = whoKey;
       fetch(WORKER_URL + "/list?u=" + encodeURIComponent(who), { method: "PUT", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, base: base }) })
+            body: JSON.stringify({ name: who, numbers: numbers, hidden: hidden, delivered: delivered, order: order, links: links, base: base }) })
         .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
         .then(function (st) {
           if (mine !== whoKey) return;
           var changed = JSON.stringify(st.numbers) !== JSON.stringify(numbers) || JSON.stringify(st.hidden) !== JSON.stringify(hidden);
           setState(st); offline = false; lastSaved = snapshot(); cacheState(false);
-          if (changed) render(); else stamp();
+          if (changed) render(); else { stamp(); paintLinks(); }
         })
         .catch(function () { offline = true; stamp(); });
     }, 300);
@@ -460,6 +479,7 @@
           (l.hidden || []).forEach(function (n) { if (hidden.indexOf(n) < 0) hidden.push(n); });
           Object.keys(l.delivered || {}).forEach(function (k) { if (!(delivered[k] >= l.delivered[k])) delivered[k] = l.delivered[k]; });
           if (!order.length) order = l.order || [];
+          Object.keys(l.links || {}).forEach(function (k) { if (!links[k]) links[k] = l.links[k]; });
         }
       })
       .catch(function () { offline = true; lastSaved = local && local.dirty ? "" : snapshot(); })
@@ -857,7 +877,7 @@
       '<div class="hd-m">' + chip("查询中", "") + '<span class="meta" data-role="meta"></span></div>' +
       '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<span class="seg" role="group" aria-label="可见范围"><button type="button" data-on="0"' + (isShared(n) ? "" : ' class="on"') + '>私有</button><button type="button" data-on="1"' + (isShared(n) ? ' class="on"' : "") + '>共享</button></span><button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
-      '</div><div data-role="body"><div class="note">正在查询…</div></div>';
+      '<div class="lk" data-role="lk"></div></div><div data-role="body"><div class="note">正在查询…</div></div>';
     var seg = $(".seg", el);
     if (seg) seg.addEventListener("click", function (e) {
       var b = e.target.closest("button"); if (!b) return;
@@ -884,14 +904,53 @@
       var done = function (ok) { copy.textContent = ok ? "已复制" : "失败"; setTimeout(function () { copy.textContent = "复制"; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(n).then(function () { done(true); }, function () { done(false); }); else done(false);
     });
+    paintLink(el, n);
     el.addEventListener("click", function (e) {
-      if (e.target.closest("a, button, .grip")) return;
+      if (e.target.closest("a, button, input, .grip")) return;
       if (window.getSelection && String(window.getSelection()).length) return;
       select(n);
     });
     enableDrag(el);
     return el;
   }
+
+  // Linked last-mile number under the main one: link, copy, unlink; "+ 关联" on the selected card when empty.
+  function linkedCarrier(v) { return /^1Z/i.test(v) ? "UPS" : "DHL"; }
+  function paintLink(el, n) {
+    var box = $('[data-role="lk"]', el); if (!box) return;
+    var v = links[n];
+    box.classList.toggle("none", !v);
+    if (!v) {
+      box.innerHTML = '<button type="button" class="lk-add">+ 关联</button>';
+      $(".lk-add", box).addEventListener("click", function (e) { e.stopPropagation(); editLink(el, n); });
+      return;
+    }
+    var c = linkedCarrier(v);
+    box.innerHTML = '<span class="lk-c">' + c + '</span><a class="lk-n" href="' + esc(carrierUrl(c, v)) + '" target="_blank" rel="noopener" title="在 ' + c + ' 官网查询">' + esc(v) + ' ↗</a>' +
+      '<button type="button" class="copy lk-cp">复制</button><button type="button" class="lk-x" title="取消关联" aria-label="取消关联">&times;</button>';
+    var cp = $(".lk-cp", box);
+    cp.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var done = function (ok) { cp.textContent = ok ? "已复制" : "失败"; setTimeout(function () { cp.textContent = "复制"; }, 1500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { done(true); }, function () { done(false); }); else done(false);
+    });
+    $(".lk-x", box).addEventListener("click", function (e) { e.stopPropagation(); delete links[n]; persist(); paintLink(el, n); });
+  }
+  function editLink(el, n) {
+    var box = $('[data-role="lk"]', el);
+    box.innerHTML = '<input class="lk-in" type="text" inputmode="latin" autocomplete="off" spellcheck="false" placeholder="关联单号" aria-label="关联单号">';
+    var inp = $(".lk-in", box), done = false;
+    inp.focus();
+    function finish(save) {
+      if (done) return; done = true;
+      var v = inp.value.trim().toUpperCase().replace(/\s+/g, "");
+      if (save && /^[A-Z0-9-]{4,40}$/.test(v) && v !== n) { links[n] = v; persist(); }
+      paintLink(el, n);
+    }
+    inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") finish(false); });
+    inp.addEventListener("blur", function () { finish(true); });
+  }
+  function paintLinks() { list.querySelectorAll(".card").forEach(function (c) { paintLink(c, c.dataset.n); }); }
 
   function kmOf(info) {
     var m = String(info || "").match(/距离?\s*([^\s，,。\d]{2,12}?)\s*(\d+)\s*km/i);
