@@ -4,11 +4,13 @@
 //
 // Secrets / vars (Workers → Settings → Variables):
 //   TRACK17_TOKEN    17TRACK API key (Settings → API in the 17TRACK dashboard)
+//   DHL_API_KEY      DHL "Shipment Tracking - Unified" key (developer.dhl.com)
 //   ALLOWED_ORIGINS  comma-separated page origins, default https://yuuteng.github.io
 //
 //   LISTS            KV namespace holding one list per name (key list:<name>)
 //
 // GET /?no=CY034468628CN           tracking lookup
+// GET /dhl?no=617006259            DHL events for a linked last-mile number
 // GET /list?u=<name>               the list saved under that name
 // PUT /list?u=<name>  {state}      save it; merged with the stored one when `base` is stale
 // GET /shared                      numbers everyone sees: { no: { by, t } }
@@ -39,6 +41,7 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/list") return handleList(req, env, url, cors);
     if (url.pathname === "/shared") return handleShared(req, env, url, cors);
+    if (url.pathname === "/dhl") return handleDhl(env, url, cors);
     if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
@@ -110,6 +113,34 @@ function normalize(no, acc) {
     traces: events,
     link: "https://t.17track.net/zh-cn#nums=" + no
   };
+}
+
+async function handleDhl(env, url, cors) {
+  if (!env.DHL_API_KEY) return json({ error: "DHL_API_KEY not set" }, 500, cors);
+  const no = (url.searchParams.get("no") || "").trim().toUpperCase();
+  if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
+  const cache = caches.default;
+  const cacheKey = new Request(url.origin + "/dhl?no=" + no);
+  const hit = await cache.match(cacheKey);
+  if (hit) { const r = new Response(hit.body, hit); Object.entries(cors).forEach(([k, v]) => r.headers.set(k, v)); r.headers.set("X-Cache", "HIT"); return r; }
+  const r = await fetch("https://api-eu.dhl.com/track/shipments?trackingNumber=" + encodeURIComponent(no), {
+    headers: { "DHL-API-Key": env.DHL_API_KEY, "Accept": "application/json" }
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok && r.status !== 404) return json({ error: j.detail || j.title || ("HTTP " + r.status), code: r.status }, 502, cors);
+  const sh = (j.shipments || [])[0] || {};
+  const traces = (sh.events || []).map(e => {
+    const a = (e.location && e.location.address) || {};
+    return {
+      time: String(e.timestamp || "").replace("T", " ").slice(0, 19),
+      info: e.description || e.status || "",
+      place: [a.addressLocality, a.countryCode].filter(Boolean).join(", ") || null,
+      code: e.statusCode || null
+    };
+  }).filter(t => t.time).sort((x, y) => y.time.localeCompare(x.time));
+  const res = json({ no, source: "dhl", statusCode: (sh.status && sh.status.statusCode) || null, traces }, 200, { ...cors, "Cache-Control": "public, max-age=900" });
+  if (traces.length) await cache.put(cacheKey, res.clone());
+  return res;
 }
 
 const NAME_MAX = 40, LIST_MAX = 200, NUM_RE = /^[A-Z0-9-]{4,40}$/;

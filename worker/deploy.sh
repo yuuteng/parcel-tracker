@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Upload worker.js to Cloudflare via the REST API (no wrangler needed).
-# Usage: source ~/.config/parcel-tracker/cloudflare.env; worker/deploy.sh [--token KEY] [--origins ORIGINS]
+# Usage: source ~/.config/parcel-tracker/cloudflare.env; worker/deploy.sh [--token KEY] [--dhl KEY] [--origins ORIGINS]
 set -euo pipefail
 NAME=parcel-17track
 DIR=$(cd "$(dirname "$0")" && pwd)
@@ -9,16 +9,17 @@ KV_LISTS_ID=${KV_LISTS_ID:-}
 API="https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers"
 AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN")
 
-TOKEN=""; ORIGINS=""
-while [ $# -gt 0 ]; do case "$1" in --token) TOKEN=$2; shift 2;; --origins) ORIGINS=$2; shift 2;; *) echo "unknown arg $1"; exit 1;; esac; done
+TOKEN=""; ORIGINS=""; DHL=""
+while [ $# -gt 0 ]; do case "$1" in --token) TOKEN=$2; shift 2;; --origins) ORIGINS=$2; shift 2;; --dhl) DHL=$2; shift 2;; *) echo "unknown arg $1"; exit 1;; esac; done
 
 # Bindings: keep whatever is already set unless overridden on the command line.
-BINDINGS=$(python3 - "$TOKEN" "$ORIGINS" "$KV_LISTS_ID" <<'PY'
+BINDINGS=$(python3 - "$TOKEN" "$ORIGINS" "$KV_LISTS_ID" "$DHL" <<'PY'
 import json,sys
-token,origins,kv=sys.argv[1],sys.argv[2],sys.argv[3]
+token,origins,kv,dhl=sys.argv[1],sys.argv[2],sys.argv[3],sys.argv[4]
 b=[]
 if kv: b.append({"type":"kv_namespace","name":"LISTS","namespace_id":kv})
 if token: b.append({"type":"secret_text","name":"TRACK17_TOKEN","text":token})
+if dhl: b.append({"type":"secret_text","name":"DHL_API_KEY","text":dhl})
 if origins: b.append({"type":"plain_text","name":"ALLOWED_ORIGINS","text":origins})
 print(json.dumps({"main_module":"worker.js","compatibility_date":"2026-09-01","bindings":b,"keep_bindings":["secret_text","plain_text","kv_namespace"]}))
 PY

@@ -934,7 +934,7 @@
       var done = function (ok) { cp.textContent = ok ? "已复制" : "失败"; setTimeout(function () { cp.textContent = "复制"; }, 1500); };
       if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { done(true); }, function () { done(false); }); else done(false);
     });
-    $(".lk-x", box).addEventListener("click", function (e) { e.stopPropagation(); delete links[n]; persist(); paintLink(el, n); });
+    $(".lk-x", box).addEventListener("click", function (e) { e.stopPropagation(); delete links[n]; persist(); paintLink(el, n); load(el, n); });
   }
   function editLink(el, n) {
     var box = $('[data-role="lk"]', el);
@@ -944,7 +944,7 @@
     function finish(save) {
       if (done) return; done = true;
       var v = inp.value.trim().toUpperCase().replace(/\s+/g, "");
-      if (save && /^[A-Z0-9-]{4,40}$/.test(v) && v !== n) { links[n] = v; persist(); }
+      if (save && /^[A-Z0-9-]{4,40}$/.test(v) && v !== n) { links[n] = v; persist(); load(el, n); }
       paintLink(el, n);
     }
     inp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); finish(true); } else if (e.key === "Escape") finish(false); });
@@ -958,7 +958,7 @@
   }
 
   function renderShipment(el, n, s) {
-    var st = (s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]);
+    var st = s.st || ((s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]));
     var head = $(".hd", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
 
@@ -1252,7 +1252,32 @@
     document.body.classList.remove("sorting-now");
     drag = null;
   }
+  function fetchDhl(v) {
+    return fetch(WORKER_URL.replace(/\/$/, "") + "/dhl?no=" + encodeURIComponent(v), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { return j && Array.isArray(j.traces) ? j : null; })
+      .catch(function () { return null; });
+  }
+  // Adds the carrier's events the forwarder does not have yet; an event both report keeps the forwarder's row.
+  function mergeDhl(s, d) {
+    if (!d || !d.traces.length) return s;
+    var own = (s.traces || []).map(function (t) { return { m: String(t.time).slice(0, 16), at: +parseTime(t.time), k: String(t.info).toLowerCase().replace(/[^a-z0-9]/g, "") }; });
+    var extra = d.traces.filter(function (t) {
+      var m = String(t.time).slice(0, 16), at = +parseTime(t.time), k = String(t.info).toLowerCase().replace(/[^a-z0-9]/g, "");
+      return !own.some(function (o) { return o.m === m || (k && o.k.indexOf(k) >= 0 && Math.abs(o.at - at) <= 9 * 3600000); });
+    });
+    if (!extra.length) return s;
+    var out = {}; Object.keys(s).forEach(function (key) { out[key] = s[key]; });
+    out.traces = s.traces.concat(extra.map(function (t) { return { time: t.time, info: t.info, place: t.place || null }; }))
+      .sort(function (a, b) { return String(b.time).localeCompare(String(a.time)); });
+    if (extra.indexOf(d.traces[0]) >= 0 && out.traces[0].time === d.traces[0].time) {
+      var top = d.traces[0], code = d.statusCode === "delivered" || top.code === "delivered" ? "delivered" : top.code;
+      out.st = code === "delivered" ? ["已签收", "ok"] : code === "failure" ? ["异常", "bad"] : [itdidaLabel(top.info), itdidaCls(top.info)];
+    }
+    return out;
+  }
   function load(el, n) {
+    var v = links[n], dhl = v && WORKER_URL && linkedCarrier(v) === "DHL" ? fetchDhl(v) : null;
     fetchShipment(n)
       .catch(function (e) {
         if (!e.notFound) throw e;
@@ -1262,6 +1287,7 @@
         if (!e.notFound || !WORKER_URL) throw e;
         return fetchWorker(n);
       })
+      .then(function (s) { return dhl ? dhl.then(function (d) { return mergeDhl(s, d); }) : s; })
       .then(function (s) { renderShipment(el, n, s); })
       .catch(function (e) { if (e.notFound) renderItdida(el, n, e.message); else renderError(el, n, e.message || String(e)); });
   }
