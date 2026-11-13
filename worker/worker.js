@@ -8,6 +8,10 @@
 //   ALLOWED_ORIGINS  comma-separated page origins, default https://yuuteng.github.io
 //
 //   LISTS            KV namespace holding one list per name (key list:<name>)
+//   RESEND_API_KEY   Resend key for change emails
+//   NOTIFY_EMAIL     where change emails go
+//   NOTIFY_OWNER     the one list name allowed to subscribe (default teng)
+//   RUN_KEY          header X-Run-Key for POST /watch/run
 //
 // GET /?no=CY034468628CN           tracking lookup
 // GET /dhl?no=617006259            DHL events for a linked last-mile number
@@ -15,6 +19,10 @@
 // PUT /list?u=<name>  {state}      save it; merged with the stored one when `base` is stale
 // GET /shared                      numbers everyone sees: { no: { by, t } }
 // POST /shared {no, name, on}      share (on) or unshare (off, sharer only)
+// GET /watch?u=<name>              { owner, watched: [no] }
+// POST /watch {u, no, on}          subscribe a number to change emails (owner only)
+// POST /watch/run                  run the email check now (needs X-Run-Key)
+// Cron: checks subscribed numbers and emails new events in one message per run.
 // Error codes: -18019902 = number not registered, -18019901 = already registered.
 
 const API = "https://api.17track.net/track/v2.2/";
@@ -26,6 +34,7 @@ const STATUS = {
 const COUNTRY = { FR: "法国", CN: "中国", DE: "德国", BE: "比利时", NL: "荷兰", ES: "西班牙", IT: "意大利", GB: "英国", US: "美国", JP: "日本" };
 
 export default {
+  async scheduled(_ev, env, ctx) { ctx.waitUntil(checkWatched(env)); },
   async fetch(req, env) {
     const origin = req.headers.get("Origin") || "";
     const allowed = (env.ALLOWED_ORIGINS || "https://yuuteng.github.io").split(",").map(s => s.trim());
@@ -42,6 +51,11 @@ export default {
     if (url.pathname === "/list") return handleList(req, env, url, cors);
     if (url.pathname === "/shared") return handleShared(req, env, url, cors);
     if (url.pathname === "/dhl") return handleDhl(env, url, cors);
+    if (url.pathname === "/watch") return handleWatch(req, env, url, cors);
+    if (url.pathname === "/watch/run") {
+      if (req.method !== "POST" || !env.RUN_KEY || req.headers.get("X-Run-Key") !== env.RUN_KEY) return json({ error: "forbidden" }, 403, cors);
+      return json(await checkWatched(env), 200, cors);
+    }
     if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
@@ -202,6 +216,133 @@ async function handleShared(req, env, url, cors) {
   }
   await env.LISTS.put("shared", JSON.stringify(cur));
   return json(cur, 200, h);
+}
+
+// ---- change emails ----
+const PAGE_URL = "https://yuuteng.github.io/parcel-tracker/";
+const DELIVERED_RE = /签收|delivered/i;
+const owner = env => normName(env.NOTIFY_OWNER || "teng");
+
+async function handleWatch(req, env, url, cors) {
+  if (!env.LISTS) return json({ error: "LISTS KV not bound" }, 500, cors);
+  const h = { ...cors, "Cache-Control": "no-store" };
+  const w = (await env.LISTS.get("watch", "json")) || {};
+  if (req.method === "GET") {
+    const me = normName(url.searchParams.get("u")) === owner(env) && !!env.RESEND_API_KEY;
+    return json({ owner: me, watched: me ? Object.keys(w) : [] }, 200, h);
+  }
+  if (req.method !== "POST") return json({ error: "method not allowed" }, 405, h);
+  let b;
+  try { b = await req.json(); } catch (e) { return json({ error: "bad json" }, 400, h); }
+  if (normName(b.u) !== owner(env)) return json({ error: "forbidden" }, 403, h);
+  const no = String(b.no || "").trim().toUpperCase();
+  if (!NUM_RE.test(no)) return json({ error: "bad number" }, 400, h);
+  if (b.on) { if (!w[no]) w[no] = { t: Date.now(), seen: null }; }
+  else delete w[no];
+  await env.LISTS.put("watch", JSON.stringify(w));
+  return json({ owner: true, watched: Object.keys(w) }, 200, h);
+}
+
+function looseJson(t) {
+  try { return JSON.parse(t); } catch (e) {}
+  const i = t.search(/[{[]/);
+  return i < 0 ? null : JSON.parse(t.slice(i));
+}
+const ev = (time, info, place) => ({ time: String(time || "").replace("T", " ").slice(0, 19), info: String(info || ""), place: place || null });
+
+async function srcNextsls(no) {
+  const r = await fetch("https://tracking.nextsls.com/rest/trace/tracking/lists?app=642e7f7573f04222943d090e&number=" + encodeURIComponent(no));
+  if (!r.ok) throw new Error("nextsls HTTP " + r.status);
+  const s = (looseJson(await r.text()) || {}).data?.shipment;
+  if (!s) return null;
+  return { delivered: s.status === "delivered", traces: (s.traces || []).map(t => ev(t.time, t.info, t.location)) };
+}
+async function srcItdida(nos) {
+  const out = {};
+  for (let i = 0; i < nos.length; i += 10) {
+    if (i) await new Promise(r => setTimeout(r, 1500));
+    const r = await fetch("https://yen.itdida.com/itdida-api/queryTracks?no=" + encodeURIComponent(nos.slice(i, i + 10).join(",")));
+    if (!r.ok) continue;
+    for (const item of (looseJson(await r.text()) || {}).data || []) {
+      const tl = item.trackList || [];
+      if (tl.length) out[String(item.no).toUpperCase()] = { traces: tl.map(t => ev(t.time, t.desc || t.eventCodeDesc, t.localtion || [t.eventCity, t.eventCountry].filter(Boolean).join(", "))) };
+    }
+  }
+  return out;
+}
+async function src17(env, no) {
+  if (!env.TRACK17_TOKEN) return null;
+  const info = await call17(env, "gettrackinfo", no);
+  if (!info.accepted) return null;
+  const n = normalize(no, info.accepted);
+  return n.traces.length ? { delivered: n.statusRaw === "Delivered", traces: n.traces } : null;
+}
+async function srcDhl(env, no) {
+  if (!env.DHL_API_KEY) return null;
+  const r = await fetch("https://api-eu.dhl.com/track/shipments?trackingNumber=" + encodeURIComponent(no), { headers: { "DHL-API-Key": env.DHL_API_KEY, "Accept": "application/json" } });
+  if (!r.ok) return null;
+  const sh = ((await r.json().catch(() => ({}))).shipments || [])[0];
+  if (!sh) return null;
+  return {
+    delivered: (sh.status && sh.status.statusCode) === "delivered",
+    traces: (sh.events || []).map(e => { const a = (e.location && e.location.address) || {}; return ev(e.timestamp, e.description || e.status, [a.addressLocality, a.countryCode].filter(Boolean).join(", ")); })
+  };
+}
+
+async function checkWatched(env) {
+  const w = (await env.LISTS.get("watch", "json")) || {};
+  const nos = Object.keys(w);
+  if (!nos.length) return { checked: 0, changed: 0 };
+  const list = (await env.LISTS.get("list:" + owner(env), "json")) || {};
+  const links = list.links || {};
+  const it = await srcItdida(nos).catch(() => ({}));
+  const changes = [];
+  for (const no of nos) {
+    let s = await srcNextsls(no).catch(() => null);
+    if (!s) s = it[no] || null;
+    if (!s) s = await src17(env, no).catch(() => null);
+    const d = links[no] ? await srcDhl(env, links[no]).catch(() => null) : null;
+    if (!s && !d) continue;
+    const seenMin = new Set();
+    const traces = [...(s ? s.traces : []), ...(d ? d.traces : [])].filter(t => t.time)
+      .sort((x, y) => y.time.localeCompare(x.time))
+      .filter(t => { const k = t.time.slice(0, 16); if (seenMin.has(k)) return false; seenMin.add(k); return true; });
+    if (!traces.length) continue;
+    const newest = traces[0].time, last = w[no].seen;
+    const done = !!(s && s.delivered) || !!(d && d.delivered) || DELIVERED_RE.test(traces[0].info);
+    if (last == null) { w[no].seen = newest; if (done) delete w[no]; continue; }
+    if (newest <= last) continue;
+    changes.push({ no, link: links[no] || null, done, events: traces.filter(t => t.time > last).slice(0, 8) });
+    if (done) delete w[no]; else w[no].seen = newest;
+  }
+  if (changes.length) {
+    const sent = await sendMail(env, changes);
+    if (!sent.ok) return { checked: nos.length, changed: changes.length, error: sent.error };
+  }
+  await env.LISTS.put("watch", JSON.stringify(w));
+  return { checked: nos.length, changed: changes.length };
+}
+
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+async function sendMail(env, changes) {
+  if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return { ok: false, error: "email not configured" };
+  const one = changes[0];
+  const subject = changes.length === 1
+    ? `${one.no} ${one.done ? "已签收" : "有新动态"}：${one.events[0].info.slice(0, 60)}`
+    : `${changes.length} 个包裹有新动态` + (changes.some(c => c.done) ? `（${changes.filter(c => c.done).length} 个已签收）` : "");
+  const page = PAGE_URL + "#u=" + encodeURIComponent(env.NOTIFY_OWNER || "teng");
+  const html = `<div style="font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:#222">` + changes.map(c =>
+    `<h3 style="margin:18px 0 6px;font-size:15px">${esc(c.no)}${c.link ? ` <span style="color:#888;font-weight:400">· ${esc(c.link)}</span>` : ""}${c.done ? ` <span style="color:#2a8a3a">· 已签收</span>` : ""}</h3>` +
+    `<table style="border-collapse:collapse">` + c.events.map(e =>
+      `<tr><td style="padding:2px 12px 2px 0;color:#888;white-space:nowrap;font-family:monospace">${esc(e.time.slice(5, 16))}</td><td style="padding:2px 0">${esc(e.info)}${e.place ? ` <span style="color:#888">· ${esc(e.place)}</span>` : ""}</td></tr>`).join("") +
+    `</table>`).join("") + `<p style="margin-top:20px"><a href="${page}">打开包裹追踪</a></p></div>`;
+  const text = changes.map(c => `${c.no}${c.done ? " · 已签收" : ""}\n` + c.events.map(e => `  ${e.time.slice(5, 16)}  ${e.info}${e.place ? " · " + e.place : ""}`).join("\n")).join("\n\n") + `\n\n${page}`;
+  const r = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: "包裹追踪 <onboarding@resend.dev>", to: [env.NOTIFY_EMAIL], subject, html, text })
+  });
+  return r.ok ? { ok: true } : { ok: false, error: "resend HTTP " + r.status + " " + (await r.text()).slice(0, 200) };
 }
 
 function json(obj, status, headers) {

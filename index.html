@@ -161,6 +161,13 @@
   @media (prefers-reduced-motion:reduce){.lk-add,.lk-in{animation:none}}
   .tag{font-size:11px;color:var(--mute);border:1px solid var(--line-2);border-radius:4px;padding:1px 7px;letter-spacing:.04em}
   .del{border:none;background:none;color:var(--mute);font-size:20px;line-height:1;padding:0 4px}
+  .bell{border:none;background:none;color:var(--mute);padding:2px 3px;line-height:0;border-radius:5px;transition:color .2s,transform .2s}
+  .bell svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:fill .2s}
+  .bell:hover{color:var(--ink)}
+  .bell.on{color:var(--acc)} .bell.on svg{fill:currentColor}
+  .bell.ring{animation:ring .5s ease-out}
+  @keyframes ring{0%,100%{transform:none}20%{transform:rotate(16deg)}45%{transform:rotate(-12deg)}70%{transform:rotate(6deg)}}
+  @media (prefers-reduced-motion:reduce){.bell.ring{animation:none}}
   .del:hover{color:var(--bad);border-color:transparent}
   .now{display:flex;gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line);background:var(--panel-2);min-width:0}
   .now .txt{font-size:13px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -304,6 +311,7 @@
   // ---- shared numbers: Worker KV "shared" { no: {by, t} }; personal ones live
   // under a name in the Worker's KV, cached in localStorage ----
   var shared = {};
+  var watch = { owner: false, watched: [] };
   function isShared(n) { return Object.prototype.hasOwnProperty.call(shared, n); }
   function sharedByMe(n) { return isShared(n) && normName(shared[n].by) === whoKey; }
   function inMine(n) { return numbers.indexOf(n) >= 0; }
@@ -358,6 +366,36 @@
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
       .then(function (j) { shared = j; paintShare(n); stamp(); })
       .catch(function () { if (prev) shared[n] = prev; else delete shared[n]; paintShare(n); offline = true; stamp(); });
+  }
+  // Change emails: only the owner name gets bells; the Worker checks subscribed numbers every 2 hours.
+  function isWatched(n) { return watch.watched.indexOf(n) >= 0; }
+  function loadWatch() {
+    var me = whoKey;
+    return fetch(WORKER_URL + "/watch?u=" + encodeURIComponent(who), { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) { if (j && me === whoKey) { watch = j; paintWatch(); } })
+      .catch(function () {});
+  }
+  function paintWatch(n, el) {
+    var cards = el ? [el] : list.querySelectorAll(n ? '.card[data-n="' + n + '"]' : ".card");
+    Array.prototype.forEach.call(cards, function (c) {
+      var b = $(".bell", c); if (!b) return;
+      var on = isWatched(c.dataset.n);
+      b.hidden = !watch.owner;
+      b.classList.toggle("on", on);
+      b.title = on ? "已订阅邮件提醒,点击取消" : "有新动态时发邮件提醒";
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+  function setWatch(n, on) {
+    var prev = watch.watched.slice();
+    watch.watched = on ? prev.concat([n]) : prev.filter(function (x) { return x !== n; });
+    paintWatch(n);
+    var b = list.querySelector('.card[data-n="' + n + '"] .bell');
+    if (b && on) { b.classList.remove("ring"); void b.offsetWidth; b.classList.add("ring"); }
+    return fetch(WORKER_URL + "/watch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ u: who, no: n, on: !!on }) })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) { watch = j; paintWatch(); })
+      .catch(function () { watch.watched = prev; paintWatch(n); offline = true; stamp(); });
   }
   function paintShare(n) {
     var el = list.querySelector('.card[data-n="' + n + '"] .seg'); if (!el) return;
@@ -489,6 +527,7 @@
         extra.forEach(function (n) { if (numbers.indexOf(n) < 0) numbers.unshift(n); });
         if (!offline || local) cacheState(local && local.dirty);
         persist(); if (cb) cb();
+        watch = { owner: false, watched: [] }; loadWatch();
       });
   }
 
@@ -869,6 +908,7 @@
   }
 
   // ---- cards ----
+  var BELL = '<button type="button" class="bell" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></button>';
   function shell(n, isPub) {
     var el = document.createElement("section");
     el.className = "card";
@@ -877,9 +917,11 @@
       '<div class="hd-l"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num">' + esc(n) + '</span>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button></div>' +
       '<div class="hd-m">' + chip("查询中", "") + '<span class="meta" data-role="meta"></span></div>' +
-      '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span><button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
-                : '<span class="seg" role="group" aria-label="可见范围"><button type="button" data-on="0"' + (isShared(n) ? "" : ' class="on"') + '>私有</button><button type="button" data-on="1"' + (isShared(n) ? ' class="on"' : "") + '>共享</button></span><button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
+      '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span>BELL + '<button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
+                : '<span class="seg" role="group" aria-label="可见范围"><button type="button" data-on="0"' + (isShared(n) ? "" : ' class="on"') + '>私有</button><button type="button" data-on="1"' + (isShared(n) ? ' class="on"' : "") + '>共享</button></span>' + BELL + '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
       '<div class="lk" data-role="lk"></div></div><div data-role="body"><div class="note">正在查询…</div></div>';
+    $(".bell", el).addEventListener("click", function (e) { e.stopPropagation(); setWatch(n, !isWatched(n)); });
+    paintWatch(n, el);
     var seg = $(".seg", el);
     if (seg) seg.addEventListener("click", function (e) {
       var b = e.target.closest("button"); if (!b) return;
