@@ -120,7 +120,7 @@ async function handleDhl(env, url, cors) {
   const no = (url.searchParams.get("no") || "").trim().toUpperCase();
   if (!/^[A-Z0-9-]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
   const cache = caches.default;
-  const cacheKey = new Request(url.origin + "/dhl?no=" + no);
+  const cacheKey = new Request(url.origin + "/dhl?v=2&no=" + no);
   const hit = await cache.match(cacheKey);
   if (hit) { const r = new Response(hit.body, hit); Object.entries(cors).forEach(([k, v]) => r.headers.set(k, v)); r.headers.set("X-Cache", "HIT"); return r; }
   const r = await fetch("https://api-eu.dhl.com/track/shipments?trackingNumber=" + encodeURIComponent(no), {
@@ -138,7 +138,8 @@ async function handleDhl(env, url, cors) {
       code: e.statusCode || null
     };
   }).filter(t => t.time).sort((x, y) => y.time.localeCompare(x.time));
-  const res = json({ no, source: "dhl", statusCode: (sh.status && sh.status.statusCode) || null, traces }, 200, { ...cors, "Cache-Control": "public, max-age=900" });
+  const due = /^\d{4}-\d{2}-\d{2}/.test(sh.agreedDeliveryDate || "") ? sh.agreedDeliveryDate.slice(0, 10) : null;
+  const res = json({ no, source: "dhl", statusCode: (sh.status && sh.status.statusCode) || null, due, traces }, 200, { ...cors, "Cache-Control": "public, max-age=900" });
   if (traces.length) await cache.put(cacheKey, res.clone());
   return res;
 }

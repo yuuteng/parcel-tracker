@@ -172,6 +172,8 @@
   .now .txt .here.ship{border-radius:2px;transform:rotate(45deg)}
   a.km{text-decoration:none}
   .now .km{margin-left:auto;font:12px var(--mono);color:var(--acc);white-space:nowrap}
+  .now .due{margin-left:auto;font-size:12px;color:var(--ink);white-space:nowrap;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .now .km+.due{margin-left:0}
   .note{padding:12px 14px;color:var(--mute);font-size:13px;border-top:1px solid var(--line)}
   .note b{color:var(--ink);font-weight:500}
   .ev{display:grid;grid-template-columns:9.6em minmax(0,1fr);gap:0 10px;padding:7px 14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
@@ -208,7 +210,7 @@
     .chip{max-width:16em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .now{flex-wrap:wrap;gap:4px 10px;padding:8px 12px}
     .now .txt{white-space:normal;flex:1 1 100%}
-    .now .km{margin-left:0}
+    .now .km,.now .due{margin-left:0}
     .ev{display:block;position:relative;padding:8px 12px 8px 30px}
     .ev.head{display:none}
     .ev-t{display:block;font-size:11.5px;line-height:1.3;margin-bottom:2px}
@@ -997,11 +999,13 @@
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?\s*[^\s，,。\d]{2,12}?\s*\d+\s*km/i, "");
     if (lp && /,\s*[A-Z]{2}$/.test(lp)) lTxt = lTxt.replace(/\s*,\s*[^,]+,\s*[A-Z]{2}\s*$/, "");
     if (lp && lTxt.replace(/^现站[:：]\s*/, "").replace(/[,，。\s]/g, "") === lp.replace(/[,，。\s]/g, "")) lTxt = "";
-    var nowHtml = l && (lp || lk) ? '<div class="now"><span class="txt">' +
+    var due = !isDel && s.due ? new Date(s.due + "T00:00:00") : null;
+    var dueHtml = due && !isNaN(due) ? '<span class="due">约定送达 ' + esc(s.due.slice(5)) + ' 周' + "日一二三四五六".charAt(due.getDay()) + '</span>' : '';
+    var nowHtml = l && (lp || lk || dueHtml) ? '<div class="now"><span class="txt">' +
       (lp ? '<i class="here"></i><b>' + esc(showPlace(lp)) + '</b>' : '') +
       (lp && lTxt ? ' · ' : '') + esc(lTxt) +
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' +
-      (lk ? '<span class="km">距' + esc(lk.ref) + ' ' + lk.km + ' km</span>' : '') + '</div>' : '';
+      (lk ? '<span class="km">距' + esc(lk.ref) + ' ' + lk.km + ' km</span>' : '') + dueHtml + '</div>' : '';
     var rows = traces.map(function (t, i) {
       var loc = locOf(t, ref), p = loc ? loc.place : null, tm = String(t.time || "");
       return '<div class="ev' + (i === 0 ? ' cur' : '') + '"><span class="ev-t"><span class="ev-y">' + esc(tm.slice(0, 5)) + '</span>' + esc(tm.slice(5, 16)) + '</span>' +
@@ -1260,6 +1264,7 @@
   }
   // Adds the carrier's events the forwarder does not have yet; an event both report keeps the forwarder's row.
   function mergeDhl(s, d) {
+    if (d && d.due && !s.due) { s = Object.assign({}, s, { due: d.due }); }
     if (!d || !d.traces.length) return s;
     var own = (s.traces || []).map(function (t) { return { m: String(t.time).slice(0, 16), at: +parseTime(t.time), k: String(t.info).toLowerCase().replace(/[^a-z0-9]/g, "") }; });
     var extra = d.traces.filter(function (t) {
