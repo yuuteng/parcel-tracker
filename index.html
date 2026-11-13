@@ -917,7 +917,7 @@
       '<div class="hd-l"><span class="grip" title="拖动排序" aria-label="拖动排序">⋮⋮</span><span class="num">' + esc(n) + '</span>' +
       '<button type="button" class="copy" data-role="copy" title="复制单号">复制</button></div>' +
       '<div class="hd-m">' + chip("查询中", "") + '<span class="meta" data-role="meta"></span></div>' +
-      '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span>BELL + '<button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
+      '<div class="hd-r">' + (isPub ? '<span class="byline">共享 · <b>' + esc(shared[n] && shared[n].by || "") + '</b></span>' + BELL + '<button class="del" title="在这台设备上隐藏,不影响别人" aria-label="隐藏">&times;</button>'
                 : '<span class="seg" role="group" aria-label="可见范围"><button type="button" data-on="0"' + (isShared(n) ? "" : ' class="on"') + '>私有</button><button type="button" data-on="1"' + (isShared(n) ? ' class="on"' : "") + '>共享</button></span>' + BELL + '<button class="del" title="删除这个单号" aria-label="删除">&times;</button>') + '</div>' +
       '<div class="lk" data-role="lk"></div></div><div data-role="body"><div class="note">正在查询…</div></div>';
     $(".bell", el).addEventListener("click", function (e) { e.stopPropagation(); setWatch(n, !isWatched(n)); });
