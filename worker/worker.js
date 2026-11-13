@@ -118,7 +118,7 @@ function normalize(no, acc) {
 async function handleDhl(env, url, cors) {
   if (!env.DHL_API_KEY) return json({ error: "DHL_API_KEY not set" }, 500, cors);
   const no = (url.searchParams.get("no") || "").trim().toUpperCase();
-  if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
+  if (!/^[A-Z0-9-]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
   const cache = caches.default;
   const cacheKey = new Request(url.origin + "/dhl?no=" + no);
   const hit = await cache.match(cacheKey);
