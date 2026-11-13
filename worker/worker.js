@@ -285,9 +285,39 @@ async function srcDhl(env, no) {
   if (!sh) return null;
   return {
     delivered: (sh.status && sh.status.statusCode) === "delivered",
+    due: /^\d{4}-\d{2}-\d{2}/.test(sh.agreedDeliveryDate || "") ? sh.agreedDeliveryDate.slice(0, 10) : null,
     traces: (sh.events || []).map(e => { const a = (e.location && e.location.address) || {}; return ev(e.timestamp, e.description || e.status, [a.addressLocality, a.countryCode].filter(Boolean).join(", ")); })
   };
 }
+
+// Short Chinese verdict for the newest event, same wording as the page's status chips.
+function verdictOf(info, delivered) {
+  const d = String(info || "");
+  if (delivered || /签收|delivered/i.test(d)) return "已签收";
+  if (/退|拒收|return/i.test(d)) return "退回";
+  if (/异常|问题|exception/i.test(d)) return "异常";
+  if (/延误|推迟|delay/i.test(d)) return "延误";
+  if (/appointment|预约/i.test(d)) return "已预约派送";
+  if (/派送|投递|out for/i.test(d)) return "派送中";
+  if (/清关|海关|customs/i.test(d)) return "清关中";
+  if (/received at|到达|arriv/i.test(d)) return "已到达";
+  if (/开船|发运|离港|装柜|班列|起飞|departed|shipped from/i.test(d)) return "已发运";
+  if (/收货|揽收|入库|收件|picked up/i.test(d)) return "已揽收";
+  return "运输中";
+}
+const CN_PLACE = /^[一-龥]{2,6}$/;
+function cityOf(t) {
+  if (t.place) {
+    const c = t.place.split(",")[0].trim();
+    return /[a-z]/.test(c) ? c : c.toLowerCase().replace(/(^|[\s-])\S/g, m => m.toUpperCase());
+  }
+  return CN_PLACE.test(t.info.trim()) ? t.info.trim() : null;
+}
+const WEEK = "日一二三四五六";
+const dayLabel = d => `${d.slice(5, 10)} 周${WEEK[new Date(d.slice(0, 10) + "T12:00:00Z").getUTCDay()]}`;
+const toMs = t => Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10), +t.slice(11, 13) || 0, +t.slice(14, 16) || 0);
+const shortNo = n => n.length > 12 ? n.slice(0, 3) + "…" + n.slice(-4) : n;
+const carrierOf = (no, link, src) => link ? `${/^1Z/i.test(link) ? "UPS" : "DHL"} ${link}` : /^1Z/i.test(no) ? "UPS" : src;
 
 async function checkWatched(env) {
   const w = (await env.LISTS.get("watch", "json")) || {};
@@ -298,9 +328,9 @@ async function checkWatched(env) {
   const it = await srcItdida(nos).catch(() => ({}));
   const changes = [];
   for (const no of nos) {
-    let s = await srcNextsls(no).catch(() => null);
-    if (!s) s = it[no] || null;
-    if (!s) s = await src17(env, no).catch(() => null);
+    let s = await srcNextsls(no).catch(() => null), src = "nextsls";
+    if (!s) { s = it[no] || null; src = "itdida"; }
+    if (!s) { s = await src17(env, no).catch(() => null); src = "17track"; }
     const d = links[no] ? await srcDhl(env, links[no]).catch(() => null) : null;
     if (!s && !d) continue;
     const seenMin = new Set();
@@ -312,10 +342,18 @@ async function checkWatched(env) {
     const done = !!(s && s.delivered) || !!(d && d.delivered) || DELIVERED_RE.test(traces[0].info);
     if (last == null) { w[no].seen = newest; if (done) delete w[no]; continue; }
     if (newest <= last) continue;
-    changes.push({ no, link: links[no] || null, done, events: traces.filter(t => t.time > last).slice(0, 8) });
+    const fresh = traces.filter(t => t.time > last);
+    const end = done ? toMs(newest) : Date.now();
+    changes.push({
+      no, done, carrier: carrierOf(no, links[no], src), verdict: verdictOf(traces[0].info, done), city: cityOf(traces[0]),
+      days: Math.max(0, Math.round((end - toMs(traces[traces.length - 1].time)) / 86400000)),
+      due: !done && d && d.due ? dayLabel(d.due) : null,
+      events: fresh.slice(0, 6), older: traces.length - Math.min(fresh.length, 6)
+    });
     if (done) delete w[no]; else w[no].seen = newest;
   }
   if (changes.length) {
+    changes.sort((x, y) => (y.done ? 1 : 0) - (x.done ? 1 : 0));
     const sent = await sendMail(env, changes);
     if (!sent.ok) return { checked: nos.length, changed: changes.length, error: sent.error };
   }
@@ -324,19 +362,51 @@ async function checkWatched(env) {
 }
 
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
+// Amber palette; the dark one applies through prefers-color-scheme where the mail client supports it.
+const C = { page: "#f6f3ee", card: "#ffffff", border: "#ebe4d8", band: "#faf3e6", line: "#efe9df", ink: "#2b2418", ink2: "#5f564a", mute: "#9a9083", acc: "#c27c0e", dueBg: "#f3e3c4", dueInk: "#7a4a03", btnInk: "#ffffff" };
+const DARK_CSS = `@media (prefers-color-scheme: dark){
+.m-page{background:#14110c!important}.m-card{background:#1d1912!important;border-color:#332b1f!important}
+.m-band{background:#251e14!important;border-color:#2c251a!important}.m-ink{color:#f3ece0!important}.m-ink2{color:#c9bea9!important}
+.m-mute{color:#8a7f6c!important}.m-acc{color:#f2a93b!important}.m-dot{background:#f2a93b!important}
+.m-due{background:#3d2f17!important;color:#ffd18a!important}.m-btn{background:#f2a93b!important;color:#1d1408!important}}`;
+const F = "-apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif", M = "Menlo,'SF Mono',Consolas,monospace";
+const T = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"';
+
+function cardHtml(c) {
+  const top = c.events[0], info = top.info.trim(), showInfo = info && info !== c.city;
+  const rest = c.events.slice(1).map(e => {
+    const city = cityOf(e), txt = e.info.trim() === city ? city : e.info + (city ? " · " + city : "");
+    return `<tr><td width="1" valign="top" class="m-mute" style="padding:7px 12px 0 0;font-family:${M};font-size:12px;color:${C.mute};white-space:nowrap">${esc(e.time.slice(5, 16))}</td><td class="m-ink2" style="padding:6px 0 0;font-size:13px;color:${C.ink2}">${esc(txt)}</td></tr>`;
+  }).join("");
+  return `${T} class="m-card" style="background:${C.card};border:1px solid ${C.border};border-radius:14px;margin-bottom:12px">
+<tr><td class="m-band" style="background:${C.band};border-bottom:1px solid ${C.line};padding:11px 20px;border-radius:14px 14px 0 0">${T}><tr>
+<td class="m-mute" style="font-family:${M};font-size:12.5px;color:${C.mute}"><span class="m-acc" style="color:${C.acc}">${esc(c.no)}</span> · ${esc(c.carrier)}</td>
+<td align="right" class="m-mute" style="font-size:12px;color:${C.mute};white-space:nowrap">${c.done ? "用时" : "在途"} ${c.days} 天</td></tr></table></td></tr>
+<tr><td style="padding:16px 20px 4px">
+<div class="m-ink" style="font-size:21px;line-height:1.3;font-weight:700;color:${C.ink}"><span class="m-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.acc};margin:0 11px 3px 2px;vertical-align:middle"></span>${esc(c.verdict)}${c.city ? `<span class="m-ink2" style="font-weight:500;color:${C.ink2}"> · ${esc(c.city)}</span>` : ""}</div>
+${showInfo ? `<div class="m-ink2" style="font-size:13.5px;color:${C.ink2};margin-top:6px">${esc(info)}</div>` : ""}
+<div class="m-acc" style="font-family:${M};font-size:12px;color:${C.acc};margin-top:5px">${esc(top.time.slice(5, 16))}</div>
+${c.due ? `<div style="margin-top:11px"><span class="m-due" style="display:inline-block;background:${C.dueBg};color:${C.dueInk};font-size:13px;font-weight:600;padding:5px 11px;border-radius:8px">约定送达 ${esc(c.due)}</span></div>` : ""}
+</td></tr>
+<tr><td style="padding:6px 20px 14px">${T}>${rest}
+${c.older > 0 ? `<tr><td colspan="2" class="m-mute" style="padding:9px 0 0;font-size:12.5px;color:${C.mute}">… 更早 ${c.older} 条记录 · <a href="${PAGE_URL}" class="m-acc" style="color:${C.acc};text-decoration:none;font-weight:600">在页面查看</a></td></tr>` : ""}
+</table></td></tr></table>`;
+}
+
 async function sendMail(env, changes) {
   if (!env.RESEND_API_KEY || !env.NOTIFY_EMAIL) return { ok: false, error: "email not configured" };
   const one = changes[0];
   const subject = changes.length === 1
-    ? `${one.no} ${one.done ? "已签收" : "有新动态"}：${one.events[0].info.slice(0, 60)}`
-    : `${changes.length} 个包裹有新动态` + (changes.some(c => c.done) ? `（${changes.filter(c => c.done).length} 个已签收）` : "");
+    ? `${one.no} · ${one.verdict}${one.city ? " · " + one.city : ""}${one.due ? `，${one.due} 送达` : ""}`
+    : `${changes.length} 个包裹有新动态：` + changes.map(c => `${shortNo(c.no)} ${c.verdict}`).join(" · ");
   const page = PAGE_URL + "#u=" + encodeURIComponent(env.NOTIFY_OWNER || "teng");
-  const html = `<div style="font:14px/1.5 -apple-system,Segoe UI,sans-serif;color:#222">` + changes.map(c =>
-    `<h3 style="margin:18px 0 6px;font-size:15px">${esc(c.no)}${c.link ? ` <span style="color:#888;font-weight:400">· ${esc(c.link)}</span>` : ""}${c.done ? ` <span style="color:#2a8a3a">· 已签收</span>` : ""}</h3>` +
-    `<table style="border-collapse:collapse">` + c.events.map(e =>
-      `<tr><td style="padding:2px 12px 2px 0;color:#888;white-space:nowrap;font-family:monospace">${esc(e.time.slice(5, 16))}</td><td style="padding:2px 0">${esc(e.info)}${e.place ? ` <span style="color:#888">· ${esc(e.place)}</span>` : ""}</td></tr>`).join("") +
-    `</table>`).join("") + `<p style="margin-top:20px"><a href="${page}">打开包裹追踪</a></p></div>`;
-  const text = changes.map(c => `${c.no}${c.done ? " · 已签收" : ""}\n` + c.events.map(e => `  ${e.time.slice(5, 16)}  ${e.info}${e.place ? " · " + e.place : ""}`).join("\n")).join("\n\n") + `\n\n${page}`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>${DARK_CSS}</style></head>
+<body class="m-page" style="margin:0;padding:0;background:${C.page}">${T} class="m-page" style="background:${C.page};font-family:${F}"><tr><td align="center" style="padding:20px 14px">
+<div style="max-width:560px;margin:0 auto;text-align:left">${changes.map(cardHtml).join("")}
+<div style="padding:4px 2px 0"><a href="${page}" class="m-btn" style="display:inline-block;background:${C.acc};color:${C.btnInk};text-decoration:none;font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px">打开包裹追踪</a></div>
+</div></td></tr></table></body></html>`;
+  const text = changes.map(c => `${c.no} · ${c.verdict}${c.city ? " · " + c.city : ""}${c.due ? "（约定送达 " + c.due + "）" : ""}\n` +
+    c.events.map(e => `  ${e.time.slice(5, 16)}  ${e.info}${e.place ? " · " + e.place : ""}`).join("\n") + (c.older ? `\n  … 更早 ${c.older} 条记录` : "")).join("\n\n") + `\n\n${page}`;
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
