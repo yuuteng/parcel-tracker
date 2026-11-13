@@ -348,7 +348,8 @@ async function checkWatched(env) {
       no, done, carrier: carrierOf(no, links[no], src), verdict: verdictOf(traces[0].info, done), city: cityOf(traces[0]),
       days: Math.max(0, Math.round((end - toMs(traces[traces.length - 1].time)) / 86400000)),
       due: !done && d && d.due ? dayLabel(d.due) : null,
-      events: fresh.slice(0, 6), older: traces.length - Math.min(fresh.length, 6)
+      events: traces.slice(0, Math.max(3, Math.min(fresh.length, 6))),
+      older: traces.length - Math.max(3, Math.min(fresh.length, 6))
     });
     if (done) delete w[no]; else w[no].seen = newest;
   }
