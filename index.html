@@ -14,7 +14,7 @@
 <style>
   :root{
     --bg:#0b1220; --panel:#111a2c; --panel-2:#172238; --ink:#e6ecf5; --ink-2:#a7b4c8; --mute:#66758f; --line:#1f2b42; --line-2:#2c3a57;
-    --acc:#f5a524; --acc-soft:rgba(245,165,36,.12); --here:#ff6b3d; --ok:#3ecf8e; --warn:#f5a524; --pick:#5aa9ff; --bad:#ff5c5c;
+    --acc:#f5a524; --acc-fill:#f5a524; --on-acc:#111; --acc-soft:rgba(245,165,36,.12); --here:#ff6b3d; --ok:#3ecf8e; --warn:#f5a524; --pick:#5aa9ff; --bad:#ff5c5c;
     --tile-filter:invert(1) hue-rotate(190deg) brightness(.72) saturate(.35) contrast(1.05);
     --pop-shadow:0 0 0 1px rgba(0,0,0,.6),0 18px 48px rgba(0,0,0,.65);
     --sans:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Noto Sans SC",system-ui,sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
@@ -22,15 +22,15 @@
   }
   @media (prefers-color-scheme:light){
     :root:not([data-theme="dark"]){
-      --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
-      --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
+      --bg:#efebe3; --panel:#faf8f3; --panel-2:#f3efe7; --ink:#2a251d; --ink-2:#5b5346; --mute:#8d8576; --line:#e4ddd0; --line-2:#cfc6b5;
+      --acc:#96590a; --acc-fill:#f2a93b; --on-acc:#3a2400; --acc-soft:rgba(214,140,20,.13); --here:#d9481f; --ok:#1d8a5c; --warn:#96590a; --pick:#2a6fd6; --bad:#c53434;
       --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
       --pop-shadow:0 0 0 1px rgba(0,0,0,.08),0 18px 48px rgba(17,26,44,.22);
     }
   }
   :root[data-theme="light"]{
-    --bg:#eef1f6; --panel:#ffffff; --panel-2:#f3f5f9; --ink:#111a2c; --ink-2:#3f4d66; --mute:#7c889d; --line:#dfe4ec; --line-2:#c7cfdc;
-    --acc:#b8730a; --acc-soft:rgba(184,115,10,.1); --here:#d9481f; --ok:#1d8a5c; --warn:#b8730a; --pick:#2a6fd6; --bad:#c53434;
+    --bg:#efebe3; --panel:#faf8f3; --panel-2:#f3efe7; --ink:#2a251d; --ink-2:#5b5346; --mute:#8d8576; --line:#e4ddd0; --line-2:#cfc6b5;
+    --acc:#96590a; --acc-fill:#f2a93b; --on-acc:#3a2400; --acc-soft:rgba(214,140,20,.13); --here:#d9481f; --ok:#1d8a5c; --warn:#96590a; --pick:#2a6fd6; --bad:#c53434;
     --tile-filter:saturate(.25) sepia(.2) contrast(.92) brightness(1.03); color-scheme:light;
     --pop-shadow:0 0 0 1px rgba(0,0,0,.08),0 18px 48px rgba(17,26,44,.22);
   }
@@ -55,7 +55,7 @@
   .foot button:hover{text-decoration:underline}
   .top{position:relative}
   #me{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:8px;font-size:12.5px;color:var(--ink-2)}
-  #me .av{width:24px;height:24px;border-radius:6px;background:var(--acc);color:#111;font:600 12px var(--mono);display:grid;place-items:center}
+  #me .av{width:24px;height:24px;border-radius:6px;background:var(--acc-fill);color:var(--on-acc);font:600 12px var(--mono);display:grid;place-items:center}
   #me b{font-weight:600;color:var(--ink)}
   #me .arr{color:var(--mute);font-size:10px}
   #me.empty{border-color:var(--acc);color:var(--acc)}
@@ -67,7 +67,7 @@
   .sheet::before{content:"";position:absolute;top:-7px;right:var(--caret,28px);width:12px;height:12px;background:var(--bg);border-left:1px solid var(--acc);border-top:1px solid var(--acc);transform:rotate(45deg)}
   .sheet .who .av.blank{background:var(--line-2);color:var(--mute)}
   .sheet .who{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-  .sheet .who .av{width:36px;height:36px;border-radius:9px;background:var(--acc);color:#111;font:600 16px var(--mono);display:grid;place-items:center}
+  .sheet .who .av{width:36px;height:36px;border-radius:9px;background:var(--acc-fill);color:var(--on-acc);font:600 16px var(--mono);display:grid;place-items:center}
   .sheet .who .t{font-size:11px;color:var(--mute)} .sheet .who .n{font-weight:600}
   .sheet .list{display:grid;gap:2px;margin:0 -6px}
   .sheet .list button{display:flex;align-items:center;gap:10px;padding:7px 8px;border:0;border-radius:7px;background:none;font-size:13px;text-align:left;color:var(--ink)}
@@ -78,7 +78,7 @@
   .sheet .add input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--sans)}
   .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:6px;overflow:hidden;font-size:11px;white-space:nowrap}
   .seg button{padding:2px 8px;border:0;border-radius:0;background:none;color:var(--mute);font:500 11px var(--sans);transition:background .2s,color .2s}
-  .seg button.on{background:var(--acc);color:#111;font-weight:600}
+  .seg button.on{background:var(--acc-fill);color:var(--on-acc);font-weight:600}
   .byline{font-size:11px;color:var(--mute);white-space:nowrap}
   .byline b{color:var(--ink-2);font-weight:500}
   .controls{margin-left:auto;display:flex;gap:8px;flex:1 1 300px;max-width:560px;min-width:0}
@@ -90,7 +90,7 @@
   .controls input{flex:1;min-width:0;padding:9px 12px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:13px var(--mono)}
   button{padding:9px 14px;border:1px solid var(--line-2);border-radius:6px;background:var(--panel);color:var(--ink);font:500 13px var(--sans);cursor:pointer}
   button:hover{border-color:var(--acc)}
-  button.pri{background:var(--acc);border-color:var(--acc);color:#111}
+  button.pri{background:var(--acc-fill);border-color:var(--acc-fill);color:var(--on-acc)}
   button[disabled]{opacity:.5;cursor:default}
   button:focus-visible,input:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
