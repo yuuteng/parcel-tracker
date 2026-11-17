@@ -1,0 +1,162 @@
+[
+ {
+  "time": "2026-10-02 10:32:34",
+  "info": "DELIVERED , SURESNES, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-02 08:53:43",
+  "info": "Out For Delivery Today , St Ouen, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-02 05:56:00",
+  "info": "Processing at UPS Facility , St Ouen, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-02 04:57:00",
+  "info": "Arrived at Facility , St Ouen, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-02 04:17:00",
+  "info": "Departed from Facility , Corbeil Essonnes, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-02 00:19:00",
+  "info": "Arrived at Facility , Corbeil Essonnes, FR",
+  "place": null
+ },
+ {
+  "time": "2026-10-01 19:37:00",
+  "info": "Departed from Facility , Brussels, BE",
+  "place": null
+ },
+ {
+  "time": "2026-10-01 16:40:00",
+  "info": "Arrived at Facility , Brussels, BE",
+  "place": null
+ },
+ {
+  "time": "2026-10-01 13:20:18",
+  "info": "更新：10.1号交仓",
+  "place": null
+ },
+ {
+  "time": "2026-10-01 11:18:06",
+  "info": "清关完成，待预约交仓",
+  "place": null
+ },
+ {
+  "time": "2026-09-30 16:37:29",
+  "info": "已提柜，预计10.2号清关",
+  "place": null
+ },
+ {
+  "time": "2026-09-29 20:37:01",
+  "info": "预计9.30号提柜",
+  "place": null
+ },
+ {
+  "time": "2026-09-29 20:36:44",
+  "info": "已到站，等待提柜码",
+  "place": null
+ },
+ {
+  "time": "2026-09-28 10:37:41",
+  "info": "现站：Vyazma ，距离布列斯特1245KM",
+  "place": null
+ },
+ {
+  "time": "2026-09-23 18:08:34",
+  "info": "现站：Bezenchuk，距离布列斯特2065 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-21 15:51:15",
+  "info": "现站：Orenburg ，距离布列斯特2546 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-18 16:48:47",
+  "info": "现站：Aydyrlya，距离布列斯特3006 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-17 09:59:10",
+  "info": "现站：Kushmurun，距离布列斯特3432 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-14 14:42:40",
+  "info": "现站：NUR-SULTAN 1 ，距离布列斯特3928 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-11 14:30:47",
+  "info": "现站：Balkhash I ，距离布列斯特4511 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-09 14:33:58",
+  "info": "现站：Beskol, KZH，距离布列斯特5038 km",
+  "place": null
+ },
+ {
+  "time": "2026-09-07 15:25:21",
+  "info": "多斯特克",
+  "place": null
+ },
+ {
+  "time": "2026-09-04 15:02:52",
+  "info": "阿拉山口",
+  "place": null
+ },
+ {
+  "time": "2026-09-02 14:43:10",
+  "info": "鄯善",
+  "place": null
+ },
+ {
+  "time": "2026-08-31 15:19:44",
+  "info": "玉门东",
+  "place": null
+ },
+ {
+  "time": "2026-08-28 14:21:25",
+  "info": "江油",
+  "place": null
+ },
+ {
+  "time": "2026-08-26 14:49:20",
+  "info": "已发运",
+  "place": null
+ },
+ {
+  "time": "2026-08-15 10:21:58",
+  "info": "8.14号装柜，8.26号班列",
+  "place": null
+ },
+ {
+  "time": "2026-08-15 10:17:23",
+  "info": "深圳集散中心 发往 重庆",
+  "place": null
+ },
+ {
+  "time": "2026-08-11 18:43:04",
+  "info": "深圳集散中心 已收货 , *,CN",
+  "place": null
+ },
+ {
+  "time": "2026-08-11 12:54:43",
+  "info": "Shipper created a label, UPS has not received the package yet. , BE",
+  "place": null
+ },
+ {
+  "time": "2026-08-11 12:48:29",
+  "info": "已下单",
+  "place": null
+ }
+]

@@ -1,0 +1,47 @@
+[
+ {
+  "time": "2026-11-16 18:30:59",
+  "info": "天山",
+  "place": null
+ },
+ {
+  "time": "2026-11-13 18:30:29",
+  "info": "金昌",
+  "place": null
+ },
+ {
+  "time": "2026-11-11 18:29:09",
+  "info": "羊木",
+  "place": null
+ },
+ {
+  "time": "2026-11-09 14:16:28",
+  "info": "已发运",
+  "place": null
+ },
+ {
+  "time": "2026-11-03 15:59:52",
+  "info": "11.2号装柜，11.9号班列",
+  "place": null
+ },
+ {
+  "time": "2026-11-03 15:56:05",
+  "info": "深圳集散中心 发往 重庆",
+  "place": null
+ },
+ {
+  "time": "2026-10-29 17:42:54",
+  "info": "深圳集散中心 已收货 , *,CN",
+  "place": null
+ },
+ {
+  "time": "2026-10-29 11:55:38",
+  "info": "Shipper created a label, UPS has not received the package yet. , BE",
+  "place": null
+ },
+ {
+  "time": "2026-10-29 09:45:11",
+  "info": "已下单",
+  "place": null
+ }
+]

@@ -1,0 +1,620 @@
+{
+ "羊木": [
+  {
+   "lat": "32.5996398",
+   "lon": "105.7781532",
+   "class": "place",
+   "type": "town",
+   "namedetails": {
+    "name": "羊木镇",
+    "name:en": "Yangmu",
+    "name:zh": "羊木镇",
+    "alt_name": "羊木;Yangmo",
+    "official_name": "羊木镇"
+   }
+  },
+  {
+   "lat": "32.5985150",
+   "lon": "105.7732011",
+   "class": "railway",
+   "type": "station",
+   "namedetails": {
+    "name": "羊木",
+    "name:en": "Yangmu",
+    "name:zh": "羊木",
+    "alt_name": "羊木站;羊木火车站;Yangmu Railway Station"
+   }
+  },
+  {
+   "lat": "45.6032035",
+   "lon": "132.4335997",
+   "class": "place",
+   "type": "town",
+   "namedetails": {
+    "name": "杨木乡",
+    "name:en": "Yangmu",
+    "name:zh": "杨木乡",
+    "alt_name": "杨木",
+    "official_name": "杨木乡"
+   }
+  }
+ ],
+ "金昌": [
+  {
+   "lat": "38.5193659",
+   "lon": "102.1810951",
+   "class": "place",
+   "type": "city",
+   "namedetails": {
+    "name": "金昌市",
+    "name:cs": "Ťin-čchang",
+    "name:de": "Jinchang",
+    "name:en": "Jinchang",
+    "name:et": "Jinchang",
+    "name:eu": "Jinchang",
+    "name:fa": "جینچانگ",
+    "name:fr": "Jinchang",
+    "name:ja": "金昌市",
+    "name:ko": "진창시",
+    "name:ru": "Цзиньчан",
+    "name:sr": "Ђинчанг",
+    "name:vi": "Kim Xương",
+    "name:zh": "金昌市",
+    "short_name": "金昌",
+    "name:zh-Hans": "金昌市",
+    "name:zh-Hant": "金昌市",
+    "name:zh-Latn-pinyin": "Jīnchāng Shì"
+   }
+  }
+ ],
+ "天山": [
+  {
+   "lat": "42.2128239",
+   "lon": "80.7098120",
+   "class": "natural",
+   "type": "mountain_range",
+   "namedetails": {
+    "name": "天山山脉 - Тянь-Шань",
+    "name:cs": "Ťan-šan",
+    "name:el": "Τιεν Σαν",
+    "name:en": "Tian Shan",
+    "name:hy": "Տյան Շան",
+    "name:ka": "ტიან-შანი",
+    "name:kk": "Тянь-Шань",
+    "name:ky": "Теңир-Тоо",
+    "name:mn": "Тэнгэр Уул",
+    "name:ru": "Тянь-Шань",
+    "name:sk": "Ťanšan",
+    "name:tr": "Tanrı Dağı",
+    "name:tt": "Tän-Şän",
+    "name:ug": "تەڭرىتاغ",
+    "name:vi": "Thiên Sơn",
+    "name:zh": "天山山脉",
+    "alt_name": "天山;Tien Shan;Tianshan;Tengri Tagh",
+    "int_name": "Tian Shan",
+    "name:dng": "Тянсан"
+   }
+  },
+  {
+   "lat": "42.0940943",
+   "lon": "80.1308407",
+   "class": "place",
+   "type": "region",
+   "namedetails": {
+    "name": "Тянь-Шань",
+    "name:de": "Tienschan",
+    "name:en": "Tian Shan",
+    "name:ru": "Тянь-Шань",
+    "name:vi": "Thiên Sơn",
+    "name:zh": "天山"
+   }
+  },
+  {
+   "lat": "31.0761241",
+   "lon": "117.4405642",
+   "class": "natural",
+   "type": "peak",
+   "namedetails": {
+    "name": "天山"
+   }
+  },
+  {
+   "lat": "30.1981653",
+   "lon": "118.3084261",
+   "class": "natural",
+   "type": "peak",
+   "namedetails": {
+    "name": "天山"
+   }
+  },
+  {
+   "lat": "30.6357914",
+   "lon": "119.8237678",
+   "class": "natural",
+   "type": "peak",
+   "namedetails": {
+    "name": "天山"
+   }
+  }
+ ],
+ "玉门东": [
+  {
+   "lat": "39.8152202",
+   "lon": "97.9200900",
+   "class": "place",
+   "type": "suburb",
+   "namedetails": {
+    "name": "玉门东",
+    "name:en": "Yumendong",
+    "name:vi": "Ngọc Môn Đông",
+    "name:zh": "玉门东",
+    "old_name": "玉门东镇"
+   }
+  },
+  {
+   "lat": "39.8140663",
+   "lon": "97.9275779",
+   "class": "railway",
+   "type": "station",
+   "namedetails": {
+    "name": "玉门东",
+    "name:en": "Yumendong",
+    "name:zh": "玉门东"
+   }
+  }
+ ],
+ "鄯善": [
+  {
+   "lat": "42.2914030",
+   "lon": "90.6423020",
+   "class": "boundary",
+   "type": "administrative",
+   "namedetails": {
+    "name": "鄯善县 پىچان ناھىيىسى",
+    "name:en": "Shanshan County",
+    "name:ko": "산산현",
+    "name:tr": "Piçan",
+    "name:ug": "پىچان ناھىيىسى",
+    "name:zh": "鄯善县",
+    "alt_name": "鄯善;Shanshan;Pichan;Piqan",
+    "_place_name": "鄯善县",
+    "alt_name:ko": "피찬현",
+    "old_name:en": "Piqan",
+    "name:zh-Hant": "鄯善縣",
+    "_place_name:en": "Shanshan",
+    "_place_alt_name": "鄯善",
+    "alt_name:en": "Pichan;Shanshan County",
+    "alt_name:zh": "鄯善",
+    "name:zh-Hans": "鄯善县",
+    "name:zh-Latn-pinyin": "Shànshàn Xiàn"
+   }
+  }
+ ],
+ "阿拉山口": [
+  {
+   "lat": "45.1707258",
+   "lon": "82.5669384",
+   "class": "boundary",
+   "type": "administrative",
+   "namedetails": {
+    "name": "阿拉山口市 ئالاتاۋ ئېغىزى",
+    "name:de": "Alashankou",
+    "name:en": "Alashankou City",
+    "name:es": "Alashankou",
+    "name:fr": "Alashankou",
+    "name:kk": "Алашанькоу",
+    "name:ko": "아라산커우시",
+    "name:ru": "Алашанькоу",
+    "name:ug": "ئالاتاۋ ئېغىزى",
+    "name:zh": "阿拉山口市",
+    "alt_name": "阿拉山口;Alatav Ighizi;Alataw Pass",
+    "int_name": "Alashankou",
+    "_place_name": "阿拉山口市 ئالاتاۋ ئېغىزى ᠠᠯᠠᠭ ᠠᠭᠤᠯᠠ ᠬᠣᠲᠠ",
+    "alt_name:ko": "알라타브시",
+    "alt_name:uk": "Боро-Тала",
+    "name:zh-Hant": "阿拉山口市",
+    "_place_name:en": "Alashankou",
+    "name:fa": "گردنه آلاتاو",
+    "name:it": "Alashankou",
+    "name:ja": "阿拉山口市",
+    "name:ka": "ალაშანქოუ",
+    "name:ki": "Alashankou",
+    "name:ml": "അലാത്താവോ എഗിസി",
+    "name:mn": "ᠠᠯᠠᠭ ᠠᠭᠤᠯᠠ ᠬᠣᠲᠠ",
+    "name:sv": "Alashankou",
+    "name:tr": "Alashankou",
+    "name:uk": "Алашанькоу",
+    "name:ur": "الاشانکوو",
+    "name:vi": "A Lạp Sơn Khẩu",
+    "_place_alt_name": "阿拉山口市;Alatav Ighizi;Alataw Pass",
+    "alt_name:ml": "അലാഷാൻകോ",
+    "name:zh-Hans": "阿拉山口市"
+   }
+  },
+  {
+   "lat": "45.3631509",
+   "lon": "82.4341279",
+   "class": "place",
+   "type": "locality",
+   "namedetails": {
+    "name": "阿拉山口",
+    "name:ca": "Porta de Jungària",
+    "name:cs": "Džungarská brána",
+    "name:de": "Dsungarische Pforte",
+    "name:en": "Dzungarian Gate",
+    "name:es": "Puerta de Zungaria",
+    "name:fr": "Col d'Alataw",
+    "name:it": "Porta di Zungaria",
+    "name:kk": "Жетісу қақпасы",
+    "name:nl": "Dzjoengaarse Poort",
+    "name:pt": "Passo de Alataw",
+    "name:ru": "Джунгарские ворота",
+    "name:sk": "Džungárska brána",
+    "name:zh": "阿拉山口",
+    "alt_name": "準噶爾山口"
+   }
+  }
+ ],
+ "已发运": [
+  {
+   "lat": "26.6364881",
+   "lon": "102.5766782",
+   "class": "place",
+   "type": "suburb",
+   "namedetails": {
+    "name": "鱼城街道",
+    "name:en": "Yucheng",
+    "name:ii": "ꒄꍰꏦꈜ",
+    "name:zh": "鱼城街道",
+    "alt_name": "Yucheng Subdistrict;魚城;魚城街道;鱼城",
+    "official_name": "鱼城街道"
+   }
+  },
+  {
+   "lat": "38.9802491",
+   "lon": "110.4489451",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "中电国华神木发电有限公司(已停运)"
+   }
+  },
+  {
+   "lat": "23.0718927",
+   "lon": "113.3763132",
+   "class": "landuse",
+   "type": "construction",
+   "namedetails": {
+    "name": "广药白云山生物医药与健康研发销售总部建设工地"
+   }
+  },
+  {
+   "lat": "40.4862206",
+   "lon": "115.2678110",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "大唐国际发电股份有限公司下花园热电分公司(已停运)",
+    "name:en": "Datang Xiahuayuan power station",
+    "name:zh": "大唐国际发电股份有限公司下花园热电分公司(已停运)"
+   }
+  },
+  {
+   "lat": "38.4293198",
+   "lon": "109.7410202",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "陕西银河榆林发电有限公司(已停运)",
+    "name:en": "Yulin Shanghe power station",
+    "name:zh": "陕西银河榆林发电有限公司(已停运)",
+    "alt_name": "榆林能源上河电厂"
+   }
+  }
+ ],
+ "已下单": [
+  {
+   "lat": "36.0572097",
+   "lon": "127.0033092",
+   "class": "place",
+   "type": "hamlet",
+   "namedetails": {
+    "name": "하단",
+    "name:en": "Hadan",
+    "name:ko": "하단",
+    "name:zh-Hans": "下丹",
+    "name:zh-Hant": "下丹"
+   }
+  },
+  {
+   "lat": "25.0434133",
+   "lon": "102.6887751",
+   "class": "landuse",
+   "type": "construction",
+   "namedetails": {
+    "name": "义承·丹霞翠屿"
+   }
+  },
+  {
+   "lat": "36.7714175",
+   "lon": "136.7189664",
+   "class": "place",
+   "type": "neighbourhood",
+   "namedetails": {
+    "name": "下伊丹町"
+   }
+  }
+ ],
+ "已交仓": [
+  {
+   "lat": "29.4318959",
+   "lon": "102.2352344",
+   "class": "boundary",
+   "type": "administrative",
+   "namedetails": {
+    "name": "王岗坪彝族藏族乡",
+    "name:zh": "王岗坪彝族藏族乡",
+    "name:en": "Wanggangping",
+    "_place_name:zh": "王岗坪彝族藏族乡",
+    "alt_name": "王岗坪",
+    "old_name": "挖角彝族藏族乡;挖角乡;Wajue;wājué yízú zàngzú xiāng",
+    "official_name": "王岗坪彝族藏族乡",
+    "name:zh-Latn-pinyin": "wánggǎngpíng yízú zàngzú xiāng"
+   }
+  },
+  {
+   "lat": "38.3392442",
+   "lon": "116.9955020",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "沧州市二手货车交易市场"
+   }
+  },
+  {
+   "lat": "31.9642318",
+   "lon": "117.2687493",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "郑州商品交易所指定交割仓库"
+   }
+  },
+  {
+   "lat": "36.7278188",
+   "lon": "117.1889330",
+   "class": "landuse",
+   "type": "construction",
+   "namedetails": {
+    "name": "济南市历城区教育和体育局济钢片区韩仓河以东地块BX-6地块15班幼儿园"
+   }
+  },
+  {
+   "lat": "35.0955316",
+   "lon": "118.3071345",
+   "class": "landuse",
+   "type": "industrial",
+   "namedetails": {
+    "name": "国网山东省电力公司临沂供电公司北郊废旧物资仓库"
+   }
+  }
+ ],
+ "Delivered": [
+  {
+   "lat": "32.8286750",
+   "lon": "-88.0527068",
+   "class": "highway",
+   "type": "residential",
+   "namedetails": {
+    "name": "Delivered Lane"
+   }
+  },
+  {
+   "lat": "51.5165898",
+   "lon": "-0.1503721",
+   "class": "shop",
+   "type": "clothes",
+   "namedetails": {
+    "name": "Consigned Sealed Delivered"
+   }
+  },
+  {
+   "lat": "51.5151620",
+   "lon": "-0.0785957",
+   "class": "amenity",
+   "type": "post_office",
+   "namedetails": {
+    "name": "DX Delivered Exactly",
+    "brand": "DX",
+    "name:en": "DX Delivered Exactly"
+   }
+  },
+  {
+   "lat": "40.7600624",
+   "lon": "-73.9645262",
+   "class": "shop",
+   "type": "chemist",
+   "namedetails": {
+    "name": "MEDS: Medications & Essentials Delivered Swiftly"
+   }
+  },
+  {
+   "lat": "37.8090543",
+   "lon": "-122.4101610",
+   "class": "information",
+   "type": "board",
+   "namedetails": {
+    "name": "Fresh Fish - Delivered Daily"
+   }
+  }
+ ],
+ "Malaszewicze": [
+  {
+   "lat": "52.0240425",
+   "lon": "23.5310557",
+   "class": "place",
+   "type": "village",
+   "namedetails": {
+    "name": "Małaszewicze"
+   }
+  },
+  {
+   "lat": "52.0273444",
+   "lon": "23.5316725",
+   "class": "railway",
+   "type": "halt",
+   "namedetails": {
+    "name": "Małaszewicze"
+   }
+  },
+  {
+   "lat": "52.0406285",
+   "lon": "23.5162680",
+   "class": "place",
+   "type": "village",
+   "namedetails": {
+    "name": "Małaszewicze Duże",
+    "name:pl": "Małaszewicze Duże",
+    "alt_name": "Małaszewice Wielkie"
+   }
+  },
+  {
+   "lat": "52.0470540",
+   "lon": "23.5435453",
+   "class": "place",
+   "type": "village",
+   "namedetails": {
+    "name": "Małaszewicze Małe"
+   }
+  }
+ ],
+ "重庆": [
+  {
+   "lat": "30.0551800",
+   "lon": "107.8748712",
+   "class": "boundary",
+   "type": "administrative",
+   "namedetails": {
+    "ref": "渝",
+    "name": "重庆市",
+    "name:af": "Chongqing",
+    "name:am": "ቾንግጪንግ",
+    "name:ar": "تشونغتشينغ",
+    "name:az": "Çuntsin",
+    "name:ba": "Чунцин",
+    "name:be": "Чунцын",
+    "name:bg": "Чунцин",
+    "name:bm": "Chongqing",
+    "name:bn": "ছুংছিং",
+    "name:bo": "ཁྲུང་ཆིན་གྲོང་ཁྱེར།",
+    "name:br": "Chongqing",
+    "name:ca": "Txungking",
+    "name:ce": "Чунцин",
+    "name:cs": "Čchung-čching",
+    "name:cy": "Chongqing",
+    "name:da": "Chongqing",
+    "name:de": "Chongqing",
+    "name:el": "Τσονγκτσίνγκ",
+    "name:en": "Chongqing",
+    "name:eo": "Ĉongĉingo",
+    "name:es": "Chongqing",
+    "name:et": "Chongqing Shi",
+    "name:eu": "Chongqing",
+    "name:fa": "چونگ‌کینگ",
+    "name:fi": "Chongqing",
+    "name:fr": "Chongqing",
+    "name:ga": "Chongqing",
+    "name:gl": "Chongqing",
+    "name:gv": "Chongqing",
+    "name:ha": "Chongqing",
+    "name:he": "צ'ונגצ'ינג",
+    "name:hi": "चॊंग्किंग",
+    "name:hr": "Chongqing",
+    "name:hu": "Csungking",
+    "name:hy": "Չունցին",
+    "name:id": "Chongqing",
+    "name:ie": "Chongqing",
+    "name:is": "Chongqing",
+    "name:it": "Chongqing",
+    "name:ja": "重慶市",
+    "name:ka": "ჩუნცინი",
+    "name:kg": "Chongqing (kizunga)",
+    "name:ki": "Chongqing",
+    "name:kl": "Chongqing",
+    "name:kn": "ಚೊಂಗ್ಕಿಂಗ್",
+    "name:ko": "충칭시",
+    "name:kw": "Chongqing",
+    "name:ky": "Чунцин",
+    "name:la": "Chungkina",
+    "name:lt": "Čongčingas",
+    "name:lv": "Čuncjina",
+    "name:mg": "Chongqing",
+    "name:mi": "Chongqing",
+    "name:ml": "ചോങ്ചിങ്",
+    "name:mn": "Чунчин",
+    "name:mr": "चोंगछिंग",
+    "name:ms": "Chongqing",
+    "name:my": "ချုံချင့်မြို့",
+    "name:nl": "Chongqing",
+    "name:nn": "Chongqing",
+    "name:no": "Chongqing",
+    "name:ny": "Chongqing",
+    "name:oc": "Chongqing",
+    "name:pa": "ਚੌਂਗਕਿੰਗ",
+    "name:pl": "Chongqing",
+    "name:pt": "Xunquim",
+    "name:qu": "Chongqing",
+    "name:ro": "Chongqing",
+    "name:ru": "Чунцин",
+    "name:sk": "Čunking",
+    "name:sq": "Çongqing",
+    "name:sr": "Чунгкинг",
+    "name:sv": "Chongqing",
+    "name:sw": "Chongqing",
+    "name:ta": "சோங்கிங்",
+    "name:th": "ฉงชิ่ง",
+    "name:tl": "Chongqing",
+    "name:tn": "Chongqing",
+    "name:tr": "Çongçing",
+    "name:tt": "Чуңчиң",
+    "name:ug": "چۇڭچىڭ شەھىرى",
+    "name:uk": "Чунцін",
+    "name:ur": "چھونگ چھنگ",
+    "name:uz": "Chunsin",
+    "name:vi": "Trùng Khánh",
+    "name:wo": "Chongqing",
+    "name:za": "Cungzcing",
+    "name:zh": "重庆市",
+    "alt_name": "重庆",
+    "name:arz": "تشونجتشينج",
+    "name:cdo": "Tṳ̀ng-kéng",
+    "name:chy": "Chongqing",
+    "name:hak": "Chhùng-khin-sṳ",
+    "name:lzh": "重慶市",
+    "name:nan": "Tiông-khèng-chhī",
+    "name:pnb": "چونگچنگ",
+    "name:sah": "Чунцин",
+    "name:sat": "ᱪᱷᱩᱝ ᱪᱷᱤᱝ",
+    "name:wuu": "重慶市",
+    "name:xmf": "ჩუნცინი",
+    "name:yue": "重慶市",
+    "ISO3166-2": "CN-CQ",
+    "short_name": "渝",
+    "alt_name:en": "Chungking",
+    "alt_name:eo": "Chongqing",
+    "alt_name:pt": "Xunquim",
+    "name:ko-Hani": "重庆市",
+    "name:zh-Hans": "重庆市",
+    "name:zh-Hant": "重慶市",
+    "official_name": "重庆市",
+    "_place_name:en": "Chongqing City",
+    "name:ii": "ꍬꏿꏃ",
+    "_place_name:sk": "Čchung-čching",
+    "name:sl": "Čongčing",
+    "alt_name:de": "Tschungking;Chungching",
+    "name:zh-Latn-pinyin": "Chóngqìng shì",
+    "_place_name:zh-Latn-pinyin": "Chongqing"
+   }
+  }
+ ]
+}

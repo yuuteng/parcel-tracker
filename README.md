@@ -14,6 +14,7 @@ Live: https://yuuteng.github.io/parcel-tracker/
 - One OpenStreetMap map for all parcels. The selected route is highlighted, the others are dimmed. Clicking a card focuses its route and opens the current position.
 - Each card shows the tracking number (linked to the carrier site), a copy button, status and days in transit, carrier, destination and parcel count, then the latest event and a collapsible event table.
 - Station names are geocoded once through Nominatim and cached in the browser. Common rail stations are hardcoded so the first paint needs no lookups.
+- A place comes from the carrier's location field, a rail feed line or a `City, CC` suffix. A text that is only a name is a guess: it is shown once the geocoder has a town or station of exactly that name, and left off the map when it would make the route double back.
 - Drag the handle to reorder cards. The order is remembered.
 - The name panel at the top right opens your list; numbers are stored under that name in the Worker's KV, so the same name on another device brings them back, and the browser only caches them. Each card has a 私有 / 共享 switch: a shared number appears for everyone, and only the person who shared it can unshare it. A `#n=A,B,C` link adds those numbers to the current list and never replaces it.
 - Shared numbers can be hidden per device and restored from the header.
@@ -26,6 +27,7 @@ Live: https://yuuteng.github.io/parcel-tracker/
 | `index.html` | The whole app: styles, data layer, map and cards |
 | `numbers.json` | Shared tracking numbers, `{"shared": [...]}` |
 | `worker/` | Cloudflare Worker that relays 17TRACK with the API key kept server-side, plus its deploy script |
+| `test/` | `places.test.js` runs the place extraction and route check over recorded carrier events |
 | `demo/` | Earlier layout mockups |
 
 ## Updating
@@ -40,6 +42,12 @@ python3 -m http.server 8000
 ```
 
 Open http://localhost:8000/. The page calls the tracking APIs directly from the browser.
+
+```sh
+node test/places.test.js
+```
+
+Run it before pushing a change to how events become places on the map.
 
 ## Notes
 

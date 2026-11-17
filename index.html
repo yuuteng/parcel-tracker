@@ -273,7 +273,7 @@
   var WORKER_URL = "https://parcel-17track.yuuteng.workers.dev";
   // Pre-name storage, imported once into the first name used on this device.
   var KEY = "parcel-tracker.numbers.v1", HIDE_KEY = "parcel-tracker.hidden.v1", DELIVERED_KEY = "parcel-tracker.delivered.v1", ORDER_KEY = "parcel-tracker.order.v1";
-  var GEO_KEY = "parcel-tracker.geo.v3";
+  var GEO_KEY = "parcel-tracker.geo.v4";
   var ARCHIVE_DAYS = 5;
   var USER_KEY = "parcel-tracker.user.v1", RECENT_KEY = "parcel-tracker.users.v1", MIGRATED_KEY = "parcel-tracker.migrated.v1";
   var STATE_KEY = "parcel-tracker.state.v2:";
@@ -622,21 +622,23 @@
     };
   }
 
-  // ---- place extraction from free-text events ----
-  var SKIP = /已下单|已发运|装柜|班列|label|created|派送|签收|清关|海关|customs|delivered|out for/i;
+  // ---- places: begin (pure functions, run by test/places.test.js) ----
+  // An event names a place in one of these shapes. Any other text has no place.
+  //   carrier location field ............... t.place
+  //   "现站：X，距离Y 1245 km" ............... rail feed
+  //   "... , City , CC" ..................... carrier text
+  //   "X集散中心 已收货", "X仓 发往 Y" ......... forwarder depot (guess)
+  //   a text that is only a name ............ "江油", "Malaszewicze" (guess)
+  // A guess counts once KNOWN or the geocoder has a town or station of exactly that name.
+  var DEPOT = /^([一-龥]{2,6})(?:集散中心|分拨中心|转运中心|仓)\s*(?:已收货|收货|发往|已发出|入库|出库)/;
+  var BARE_LATIN = /^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ.'-]+(?: [A-Za-zÀ-ÿ.'-]+){0,2})(?:\s*,\s*([A-Z]{2,3}))?$/;
   function placeOf(info) {
-    if (!info) return null;
-    var m = info.match(/现站[:：]\s*([^，,。]+)/);
-    if (m) return clean(m[1]);
-    m = info.match(/^([一-龥]{2,6}?)(集散中心|仓|中心)/);
-    if (m && /[已交到入出待预提货]/.test(m[1])) m = null;
-    if (m) return clean(m[1]);
-    m = info.match(/,\s*([A-Za-zÀ-ÿ' -]{2,40}?)\s*,\s*([A-Z]{2})\s*$/);
-    if (m) return m[1].trim() + ", " + m[2];
-    if (SKIP.test(info)) return null;
-    if (/^[一-龥]{2,6}$/.test(info.trim())) return /^[已待]/.test(info.trim()) ? null : info.trim();
-    m = info.match(/^([A-Za-z][A-Za-z .'-]{2,})\s*(,|$)/);
-    if (m) return clean(m[1]);
+    var s = String(info || "").trim(), m;
+    if ((m = s.match(/现站[:：]\s*([^，,。]+)/))) return { place: clean(m[1]), guess: false };
+    if ((m = s.match(DEPOT))) return { place: m[1], guess: true };
+    if ((m = s.match(/,\s*([A-Za-zÀ-ÿ' -]{2,40}?)\s*,\s*([A-Z]{2})\s*$/))) return { place: m[1].trim() + ", " + m[2], guess: false };
+    if (/^[一-龥]{2,6}$/.test(s)) return { place: s, guess: true };
+    if ((m = s.match(BARE_LATIN))) return { place: clean(m[1]) + (m[2] && m[2].length === 2 ? ", " + m[2] : ""), guess: true };
     return null;
   }
   // Strip trailing postal codes ("成都市 61002500" → "成都市") and drop
@@ -648,66 +650,128 @@
     return p;
   }
   function showPlace(p) { return String(p).replace(/\s*,\s*/g, ", "); }
+  // "距离布列斯特 1245 km" counts down to the rail terminus; an arrival event
+  // without a station name is placed there.
+  var ARRIVE = /到站|到达|抵达/;
+  function kmOf(info) {
+    var m = String(info || "").match(/距离?\s*([^\s，,。\d]{2,12}?)\s*(\d+)\s*km/i);
+    return m ? { ref: m[1], km: m[2] } : null;
+  }
+  function refCityOf(traces) {
+    for (var i = 0; i < traces.length; i++) { var k = kmOf(traces[i].info); if (k && k.ref) return k.ref; }
+    return null;
+  }
+  // { place, guess } for one event, or null. A carrier that fills a location field is read from that field only.
+  function locOf(t, ref) {
+    var p = normPlace(t.place);
+    if (t.place) return p ? { place: p, guess: false } : null;
+    var f = placeOf(t.info), fp = f && normPlace(f.place);
+    if (fp && !f.guess) return { place: fp, guess: false };
+    if (ref && ARRIVE.test(String(t.info || ""))) return { place: ref, guess: false };
+    return fp ? { place: fp, guess: true } : null;
+  }
+  function clean(s) {
+    return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
+  }
+  function knownLL(name) {
+    return KNOWN[String(name).toUpperCase()] || KNOWN[name] || KNOWN[String(name).replace(/(市|县|区)$/, "")] || null;
+  }
+  // Geocoder hit for a guessed name: a settlement or a station whose own name is the query.
+  function nameKey(x) {
+    return String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/ł/g, "l")
+      .replace(/[\s.'’-]/g, "").replace(/(市|县|区|镇|乡|站|村|街道)$/, "");
+  }
+  function placeLike(hit, name) {
+    var kind = hit.class === "place" || hit.class === "railway" || (hit.class === "boundary" && hit.type === "administrative");
+    if (!kind) return false;
+    var q = nameKey(String(name).replace(/,\s*[A-Z]{2}$/, "")), nd = hit.namedetails || {};
+    return Object.keys(nd).some(function (k) { return nameKey(nd[k]) === q; });
+  }
+  function kmBetween(a, b) {
+    var r = Math.PI / 180, x = Math.sin((b[0] - a[0]) * r / 2), y = Math.sin((b[1] - a[1]) * r / 2);
+    return 12742 * Math.asin(Math.sqrt(x * x + Math.cos(a[0] * r) * Math.cos(b[0] * r) * y * y));
+  }
+  // Soft points (guessed names, fuzzy geocodes) that make the line double back are left out, worst first: measured
+  // between the nearest firm points, then between direct neighbours, with the destination closing the line.
+  var DETOUR_KM = 1500, DETOUR_X = 2;
+  function sane(pts, dest) {
+    var keep = pts.slice(), end = dest ? { ll: dest } : null;
+    function firm(i, step) {
+      for (var j = i + step; j >= 0 && j < keep.length; j += step) if (!keep[j].soft) return keep[j];
+      return null;
+    }
+    // Extra km the stop adds between a and b, 0 when it sits on the way.
+    function back(a, p, b) {
+      if (!a || !b) return 0;
+      var via = kmBetween(a.ll, p.ll) + kmBetween(p.ll, b.ll), direct = kmBetween(a.ll, b.ll);
+      return via - direct > DETOUR_KM && via > DETOUR_X * direct ? via - direct : 0;
+    }
+    [function (i) { return back(firm(i, -1), keep[i], firm(i, 1) || end); },
+     function (i) { return back(keep[i - 1], keep[i], keep[i + 1] || end); }
+    ].forEach(function (score) {
+      for (;;) {
+        var worst = -1, top = 0;
+        keep.forEach(function (p, i) { var x = p.soft ? score(i) : 0; if (x > top) { top = x; worst = i; } });
+        if (worst < 0) break;
+        keep.splice(worst, 1);
+      }
+    });
+    return keep;
+  }
+  // ---- places: end ----
   // The carrier's own location field, unless the event text already names it.
   function placeTag(t) {
     var p = t.place ? normPlace(t.place) : null;
     if (!p || String(t.info || "").toUpperCase().indexOf(p.split(",")[0].trim().toUpperCase()) >= 0) return "";
     return '<span class="ev-p"> · ' + esc(showPlace(p)) + '</span>';
   }
-  function placeOfTrace(t) { return normPlace(t.place || placeOf(t.info)); }
-  // "距离布列斯特 1245 km" counts down to the rail terminus; an arrival event
-  // without a station name is placed there.
-  var ARRIVE = /到站|到达|抵达/;
-  function refCityOf(traces) {
-    for (var i = 0; i < traces.length; i++) { var k = kmOf(traces[i].info); if (k && k.ref) return k.ref; }
-    return null;
-  }
-  function locOf(t, ref) {
-    var p = placeOfTrace(t);
-    if (p) return { place: p, inferred: false };
-    if (ref && ARRIVE.test(String(t.info || ""))) return { place: ref, inferred: true };
-    return null;
-  }
-  function clean(s) {
-    return s.replace(/\b(I{1,3}|IV|V|\d+)\s*$/, "").replace(/,\s*[A-Z]{2,3}\s*$/, "").trim();
-  }
 
   // ---- geocoding with a serial queue, 1.1 s apart, cached ----
   var geoCache = read(GEO_KEY, {});
+  try { localStorage.removeItem("parcel-tracker.geo.v3"); } catch (e) {}
   var queue = [], busy = false, inflight = {};
   var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
   // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
-  // stations come from KNOWN without a network call.
-  function lookup(name) {
-    var key = name.toUpperCase();
-    var k = KNOWN[key] || KNOWN[name] || KNOWN[name.replace(/(市|县|区)$/, "")];
-    if (k) return Promise.resolve({ ll: k, town: null });
-    var c = geoCache[key];
+  // stations come from KNOWN without a network call. A guessed name is cached
+  // apart from a firm one: it only accepts a town or station of that exact name.
+  function geoKey(name, guess) { return (guess ? "?" : "") + String(name).toUpperCase(); }
+  function lookup(name, guess) {
+    var k = knownLL(name);
+    if (k) return Promise.resolve({ ll: k, town: null, known: true });
+    var key = geoKey(name, guess), c = geoCache[key];
     if (c && c.ll) return Promise.resolve(c);
     if (c && c.miss && Date.now() - c.miss < MISS_TTL) return Promise.resolve(null);
     if (inflight[key]) return inflight[key];
-    return inflight[key] = new Promise(function (res) { queue.push({ name: name, key: key, res: res }); pump(); })
+    return inflight[key] = new Promise(function (res) { queue.push({ name: name, key: key, guess: !!guess, res: res }); pump(); })
       .then(function (r) { delete inflight[key]; return r; });
   }
-  function geocode(name) { return lookup(name).then(function (r) { return r ? r.ll : null; }); }
+  // A guessed name the gazetteer or an earlier lookup has confirmed.
+  function confirmed(name) { var c = geoCache[geoKey(name, true)]; return !!(knownLL(name) || (c && c.ll)); }
+  // The place an event is shown at: firm places always, guesses once confirmed and kept on the route.
+  function shownLoc(t, ref, dropped) {
+    var loc = locOf(t, ref);
+    if (!loc || !loc.guess) return loc;
+    return confirmed(loc.place) && !(dropped && dropped[loc.place]) ? loc : null;
+  }
   function pump() {
     if (busy || !queue.length) return;
     busy = true;
     var job = queue.shift();
-    nominatim(job.name)
-      .then(function (r) { return r || (/,\s*[A-Z]{2}$/.test(job.name) ? null : wikipedia(job.name)); })
+    nominatim(job.name, job.guess)
+      .then(function (r) { return r || (job.guess || /,\s*[A-Z]{2}$/.test(job.name) ? null : wikipedia(job.name)); })
       .catch(function () { return null; })
       .then(function (r) {
         geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); job.res(r);
         setTimeout(function () { busy = false; pump(); }, 1100);
       });
   }
-  function nominatim(name) {
+  function nominatim(name, guess) {
     var cc = name.match(/^(.+?),\s*([A-Z]{2})$/), q = cc ? cc[1] : name;
-    var extra = cc ? "&limit=5&countrycodes=" + cc[2].toLowerCase() : "&limit=1";
+    var extra = (cc ? "&limit=5&countrycodes=" + cc[2].toLowerCase() : guess ? "&limit=5" : "&limit=1") + (guess ? "&namedetails=1" : "");
     return fetch("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&accept-language=en" + extra + "&q=" + encodeURIComponent(q), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
       .then(function (a) {
+        if (guess) a = (a || []).filter(function (h) { return placeLike(h, name); }).slice(0, 1);
         var hit = a && a[0], ad = hit && hit.address || {};
         if (!hit) return null;
         var r = { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null };
@@ -728,7 +792,7 @@
   }
   // Wikipedia resolves spellings OSM only has under the local name
   // (Kushmurun → Qusmuryn): exact title following redirects, then full-text
-  // search; first article carrying coordinates wins.
+  // search; first article carrying coordinates wins. A search hit is soft: the route check may leave it out.
   function wikipedia(name) {
     var base = "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=coordinates&";
     function pick(d) {
@@ -740,7 +804,7 @@
     }
     function get(q) { return fetch(base + q, { cache: "force-cache" }).then(function (r) { return r.json(); }).then(pick); }
     return get("redirects=1&titles=" + encodeURIComponent(name)).then(function (r) {
-      return r || get("generator=search&gsrlimit=3&gsrsearch=" + encodeURIComponent(name));
+      return r || get("generator=search&gsrlimit=3&gsrsearch=" + encodeURIComponent(name)).then(function (f) { if (f) f.soft = true; return f; });
     });
   }
   function countryEn(c) { return { "法国": "France", "德国": "Germany", "比利时": "Belgium", "荷兰": "Netherlands", "西班牙": "Spain", "意大利": "Italy", "英国": "United Kingdom", "中国": "China" }[c] || c; }
@@ -785,7 +849,7 @@
     } });
     new Lock({ position: "topright" }).addTo(map);
   }
-  var routes = {};   // n -> { layer, pts, dest, destName, pending, total, bounds }
+  var routes = {};   // n -> { layer, pts, dest, destName, pending, miss, bounds, dropped }
   var sel = null;
   var geoNote = $("#geo-note");
 
@@ -798,7 +862,10 @@
       if (r.destTown && townKey(p.place) === townKey(r.destTown)) p.ll = r.dest;
       else if (p.alts) p.ll = nearest(p.alts, r.dest);
     });
-    var sorted = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
+    var all0 = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
+    var sorted = sane(all0, r.dest);
+    r.dropped = {};
+    all0.forEach(function (p) { if (sorted.indexOf(p) < 0) r.dropped[p.place] = true; });
     sorted = sorted.filter(function (p, i) { return i === sorted.length - 1 || p.ll[0] !== sorted[i + 1].ll[0] || p.ll[1] !== sorted[i + 1].ll[1]; });
     var sh = r.ship, shipLL = sh ? [sh.lat, sh.lon] : null;
     // Stops before boarding lead into the sea leg; stops after landing continue from the port of discharge.
@@ -870,14 +937,16 @@
     if (want) { map.once("moveend", pop); setTimeout(pop, 700); }
     if (hasArea) map.fitBounds(b.pad(.25), { maxZoom: 7 }); else map.setView(b.getCenter(), 6);
   }
+  function shownKey(traces, ref, dropped) { return traces.map(function (t) { return shownLoc(t, ref, dropped) ? "1" : "0"; }).join(""); }
   function geoStatus() {
     var pending = 0, miss = 0;
-    Object.keys(routes).forEach(function (n) { pending += routes[n].pending; miss += Math.max(0, routes[n].total - routes[n].pts.length - routes[n].pending); });
+    Object.keys(routes).forEach(function (n) { pending += routes[n].pending; miss += routes[n].miss; });
     geoNote.textContent = pending ? "定位中…" : (miss ? miss + " 个站名未能定位" : "");
   }
-  function buildRoute(n, s, traces) {
+  // shown: which events the card lists with a place; settled() runs once when the finished route disagrees.
+  function buildRoute(n, s, traces, shown, settled) {
     if (routes[n]) map.removeLayer(routes[n].layer);
-    var r = routes[n] = { layer: L.layerGroup().addTo(map), pts: [], dest: null, destName: null, pending: 0, total: 0, bounds: null, fitted: false, raf: 0 };
+    var r = routes[n] = { layer: L.layerGroup().addTo(map), pts: [], dest: null, destName: null, pending: 0, miss: 0, bounds: null, fitted: false, raf: 0, dropped: {} };
     var ordered = traces.slice().reverse();
     function schedule() {
       if (r.raf) return;
@@ -885,6 +954,7 @@
         r.raf = 0; paintRoute(n); geoStatus();
         var hasArea = r.bounds && (r.bounds.getNorth() !== r.bounds.getSouth() || r.bounds.getEast() !== r.bounds.getWest());
         if (sel === n && (!r.pending || (!r.fitted && hasArea))) { focusRoute(n, !r.pending); r.fitted = true; }
+        if (!r.pending && !r.settled && routes[n] === r) { r.settled = true; if (shownKey(traces, ref, r.dropped) !== shown) settled(); }
       });
     }
     var ref = refCityOf(traces);
@@ -892,8 +962,11 @@
     ordered.forEach(function (t, i) { if (r.boardIdx == null && VESSEL_RE.test(t.info || "")) r.boardIdx = i; });
     ordered.forEach(function (t, i) {
       var loc = locOf(t, ref); if (!loc) return;
-      r.total++; r.pending++;
-      lookup(loc.place).then(function (g) { if (g) r.pts.push({ i: i, ll: g.ll, alts: g.alts, t: t, place: loc.place }); }).catch(function () {}).then(function () { r.pending--; schedule(); });
+      r.pending++;
+      lookup(loc.place, loc.guess).then(function (g) {
+        if (g) r.pts.push({ i: i, ll: g.ll, alts: g.alts, t: t, place: loc.place, soft: !!g.soft || (loc.guess && !g.known) });
+        else if (!loc.guess) r.miss++;
+      }).catch(function () {}).then(function () { r.pending--; schedule(); });
     });
     r.destName = s.country && s.postcode ? s.postcode + " " + countryEn(s.country) : null;
     if (r.destName) { r.pending++; lookup(r.destName).then(function (g) { if (g) { r.dest = g.ll; r.destTown = g.town; } }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
@@ -996,12 +1069,8 @@
   }
   function paintLinks() { list.querySelectorAll(".card").forEach(function (c) { paintLink(c, c.dataset.n); }); }
 
-  function kmOf(info) {
-    var m = String(info || "").match(/距离?\s*([^\s，,。\d]{2,12}?)\s*(\d+)\s*km/i);
-    return m ? { ref: m[1], km: m[2] } : null;
-  }
-
-  function renderShipment(el, n, s) {
+  // textOnly: redraw the card's text after its route settled, leaving the map layer alone.
+  function renderShipment(el, n, s, textOnly) {
     var st = s.st || ((s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]));
     var head = $(".hd", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
@@ -1032,10 +1101,10 @@
     });
 
     var body = $('[data-role="body"]', el);
-    var l = traces[0], ref = refCityOf(traces);
+    var l = traces[0], ref = refCityOf(traces), dropped = routes[n] && routes[n].dropped;
     // Place = the newest event that could be located (same point as the map's current dot).
     var lp = null;
-    for (var li = 0; li < traces.length && !lp; li++) { var loc0 = locOf(traces[li], ref); if (loc0) lp = loc0.place; }
+    for (var li = 0; li < traces.length && !lp; li++) { var loc0 = shownLoc(traces[li], ref, dropped); if (loc0) lp = loc0.place; }
     var lk = l ? kmOf(l.info) : null;
     var lTxt = l ? String(l.info) : "";
     if (lk) lTxt = lTxt.replace(/[,，]?\s*距离?\s*[^\s，,。\d]{2,12}?\s*\d+\s*km/i, "");
@@ -1049,7 +1118,7 @@
       ' <span class="t">' + esc(String(l.time || "").slice(5, 16)) + '</span></span>' +
       (lk ? '<span class="km">距' + esc(lk.ref) + ' ' + lk.km + ' km</span>' : '') + dueHtml + '</div>' : '';
     var rows = traces.map(function (t, i) {
-      var loc = locOf(t, ref), p = loc ? loc.place : null, tm = String(t.time || "");
+      var loc = shownLoc(t, ref, dropped), p = loc ? loc.place : null, tm = String(t.time || "");
       return '<div class="ev' + (i === 0 ? ' cur' : '') + '"><span class="ev-t"><span class="ev-y">' + esc(tm.slice(0, 5)) + '</span>' + esc(tm.slice(5, 16)) + '</span>' +
         '<span class="ev-x"><i class="pin' + (p ? "" : " none") + '" title="' + esc(p || "无法定位") + '"></i>' + esc(t.info) + placeTag(t) + '</span></div>';
     }).join("");
@@ -1062,11 +1131,16 @@
       var tr = moreBtn.parentNode, open = tr.classList.toggle("collapsed");
       moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
     });
-    buildRoute(n, s, traces);
+    if (textOnly) {
+      var kept = routes[n] && routes[n].nowHtml, cur = $(".now", body);
+      if (kept) { if (cur) cur.outerHTML = kept; else body.insertAdjacentHTML("afterbegin", kept); }
+      return;
+    }
+    buildRoute(n, s, traces, shownKey(traces, ref, dropped), function () { if (el.isConnected) renderShipment(el, n, s, true); });
     var vessel = vesselOf(traces);
     if (vessel && isDel && !vessel.landed && traces[0]) vessel.landed = traces[0].time;
     var landedT = vessel && vessel.landed ? +parseTime(vessel.landed) : null;
-    var onLand = isDel || (landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && locOf(t, ref); }));
+    var onLand = isDel || (landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && shownLoc(t, ref, dropped); }));
     if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed), onLand); });
   }
   function fmtUtc(t) {
@@ -1090,6 +1164,7 @@
       (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
       '<a class="km" href="' + esc(link) + '" target="_blank" rel="noopener">船位 ↗</a></div>';
     if (old) old.outerHTML = html; else body.insertAdjacentHTML("afterbegin", html);
+    if (routes[n]) routes[n].nowHtml = html;
     if (has && routes[n]) { routes[n].ship = v; paintRoute(n); if (sel === n) focusRoute(n, false); }
   }
 
