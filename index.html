@@ -328,11 +328,10 @@
       }).catch(function () { return {}; });
     return shipsP;
   }
-  // "船名船次:CMA CGM CALLISTO 0R11EW1MA" → vessel name, while the parcel is still at sea.
+  // "船名船次:CMA CGM CALLISTO 0R11EW1MA" → vessel name.
   var VESSEL_RE = /(?:船名(?:船次|航次)?|vessel(?:\s*name)?)\s*[:：]\s*([A-Za-z0-9 .'-]+)/i;
   var LANDED_RE = /到港|抵港|靠港|卸船|卸柜|提柜|清关|派送|签收|arrived at port|discharg|delivered/i;
-  function vesselOf(traces, isDel) {
-    if (isDel) return null;
+  function vesselOf(traces) {
     for (var i = 0; i < traces.length; i++) {
       var m = String(traces[i].info || "").match(VESSEL_RE);
       if (!m) continue;
@@ -1063,9 +1062,10 @@
       moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
     });
     buildRoute(n, s, traces);
-    var vessel = vesselOf(traces, isDel);
+    var vessel = vesselOf(traces);
+    if (vessel && isDel && !vessel.landed && traces[0]) vessel.landed = traces[0].time;
     var landedT = vessel && vessel.landed ? +parseTime(vessel.landed) : null;
-    var onLand = landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && locOf(t, ref); });
+    var onLand = isDel || (landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && locOf(t, ref); }));
     if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed), onLand); });
   }
   function fmtUtc(t) {
