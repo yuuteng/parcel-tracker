@@ -628,12 +628,13 @@
     if (!info) return null;
     var m = info.match(/现站[:：]\s*([^，,。]+)/);
     if (m) return clean(m[1]);
-    m = info.match(/^(\S+?)(集散中心|仓|中心)/);
+    m = info.match(/^([一-龥]{2,6}?)(集散中心|仓|中心)/);
+    if (m && /[已交到入出待预提货]/.test(m[1])) m = null;
     if (m) return clean(m[1]);
     m = info.match(/,\s*([A-Za-zÀ-ÿ' -]{2,40}?)\s*,\s*([A-Z]{2})\s*$/);
     if (m) return m[1].trim() + ", " + m[2];
     if (SKIP.test(info)) return null;
-    if (/^[一-龥]{2,6}$/.test(info.trim())) return info.trim();
+    if (/^[一-龥]{2,6}$/.test(info.trim())) return /^[已待]/.test(info.trim()) ? null : info.trim();
     m = info.match(/^([A-Za-z][A-Za-z .'-]{2,})\s*(,|$)/);
     if (m) return clean(m[1]);
     return null;
