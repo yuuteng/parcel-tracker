@@ -731,6 +731,7 @@
   try { localStorage.removeItem("parcel-tracker.geo.v3"); } catch (e) {}
   var queue = [], busy = false, inflight = {};
   var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
+  var GEO_TIMEOUT = 12000;
   // Resolves to {ll:[lat,lon], town:"..."} or null. Coordinates for the rail
   // stations come from KNOWN without a network call. A guessed name is cached
   // apart from a firm one: it only accepts a town or station of that exact name.
@@ -757,13 +758,18 @@
     if (busy || !queue.length) return;
     busy = true;
     var job = queue.shift();
+    var over = false, timer = setTimeout(function () { finish(null, false); }, GEO_TIMEOUT);
+    // keep: the answer came back, so it is cached (a miss too).
+    function finish(r, keep) {
+      if (over) return;
+      over = true; clearTimeout(timer);
+      if (keep) { geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); }
+      job.res(r);
+      setTimeout(function () { busy = false; pump(); }, 1100);
+    }
     nominatim(job.name, job.guess)
       .then(function (r) { return r || (job.guess || /,\s*[A-Z]{2}$/.test(job.name) ? null : wikipedia(job.name)); })
-      .catch(function () { return null; })
-      .then(function (r) {
-        geoCache[job.key] = r || { miss: Date.now() }; store(GEO_KEY, geoCache); job.res(r);
-        setTimeout(function () { busy = false; pump(); }, 1100);
-      });
+      .then(function (r) { finish(r, true); }, function () { finish(null, false); });
   }
   function nominatim(name, guess) {
     var cc = name.match(/^(.+?),\s*([A-Z]{2})$/), q = cc ? cc[1] : name;
@@ -849,12 +855,12 @@
     } });
     new Lock({ position: "topright" }).addTo(map);
   }
-  var routes = {};   // n -> { layer, pts, dest, destName, pending, miss, bounds, dropped }
+  var routes = {};   // n -> { layer, stale, pts, dest, destName, pending, miss, bounds, dropped, ship, vessel }
   var sel = null;
   var geoNote = $("#geo-note");
 
   function paintRoute(n) {
-    var r = routes[n]; if (!r) return;
+    var r = routes[n]; if (!r || r.pending) return;
     var dim = sel != null && sel !== n, op = dim ? .35 : 1;
     var acc = v("--acc-mark"), here = v("--here"), ring = v("--panel");
     r.layer.clearLayers();
@@ -937,24 +943,27 @@
     if (want) { map.once("moveend", pop); setTimeout(pop, 700); }
     if (hasArea) map.fitBounds(b.pad(.25), { maxZoom: 7 }); else map.setView(b.getCenter(), 6);
   }
-  function shownKey(traces, ref, dropped) { return traces.map(function (t) { return shownLoc(t, ref, dropped) ? "1" : "0"; }).join(""); }
   function geoStatus() {
     var pending = 0, miss = 0;
     Object.keys(routes).forEach(function (n) { pending += routes[n].pending; miss += routes[n].miss; });
     geoNote.textContent = pending ? "定位中…" : (miss ? miss + " 个站名未能定位" : "");
   }
-  // shown: which events the card lists with a place; settled() runs once when the finished route disagrees.
-  function buildRoute(n, s, traces, shown, settled) {
-    if (routes[n]) map.removeLayer(routes[n].layer);
-    var r = routes[n] = { layer: L.layerGroup().addTo(map), pts: [], dest: null, destName: null, pending: 0, miss: 0, bounds: null, fitted: false, raf: 0, dropped: {} };
+  // The route is drawn once, when every lookup has answered; settled() then fills the card. Returns the route,
+  // whose pending count and schedule() let the caller hold it for more data (the vessel).
+  function buildRoute(n, s, traces, settled) {
+    var was = routes[n];
+    var r = routes[n] = { layer: L.layerGroup().addTo(map), pts: [], dest: null, destName: null, pending: 0, miss: 0, bounds: null, raf: 0, dropped: {},
+      stale: was ? [was.layer].concat(was.stale) : [] };
     var ordered = traces.slice().reverse();
     function schedule() {
       if (r.raf) return;
       r.raf = requestAnimationFrame(function () {
-        r.raf = 0; paintRoute(n); geoStatus();
-        var hasArea = r.bounds && (r.bounds.getNorth() !== r.bounds.getSouth() || r.bounds.getEast() !== r.bounds.getWest());
-        if (sel === n && (!r.pending || (!r.fitted && hasArea))) { focusRoute(n, !r.pending); r.fitted = true; }
-        if (!r.pending && !r.settled && routes[n] === r) { r.settled = true; if (shownKey(traces, ref, r.dropped) !== shown) settled(); }
+        r.raf = 0; geoStatus();
+        if (r.pending || routes[n] !== r) return;
+        r.stale.forEach(function (old) { map.removeLayer(old); }); r.stale = [];
+        paintRoute(n);
+        if (!r.settled) { r.settled = true; settled(); }
+        if (sel === n) focusRoute(n, true);
       });
     }
     var ref = refCityOf(traces);
@@ -970,9 +979,11 @@
     });
     r.destName = s.country && s.postcode ? s.postcode + " " + countryEn(s.country) : null;
     if (r.destName) { r.pending++; lookup(r.destName).then(function (g) { if (g) { r.dest = g.ll; r.destTown = g.town; } }).catch(function () {}).then(function () { r.pending--; schedule(); }); }
+    r.schedule = schedule;
     if (!r.pending) schedule();
+    return r;
   }
-  function dropRoute(n) { if (routes[n]) { map.removeLayer(routes[n].layer); delete routes[n]; geoStatus(); } }
+  function dropRoute(n) { if (routes[n]) { [routes[n].layer].concat(routes[n].stale).forEach(function (l) { map.removeLayer(l); }); delete routes[n]; geoStatus(); } }
   function select(n) {
     sel = n;
     list.querySelectorAll(".card").forEach(function (c) { c.classList.toggle("sel", c.dataset.n === n); });
@@ -1069,8 +1080,8 @@
   }
   function paintLinks() { list.querySelectorAll(".card").forEach(function (c) { paintLink(c, c.dataset.n); }); }
 
-  // textOnly: redraw the card's text after its route settled, leaving the map layer alone.
-  function renderShipment(el, n, s, textOnly) {
+  // Fills the card header and starts the route. The event list waits for the route and appears with it (settled).
+  function renderShipment(el, n, s, settled) {
     var st = s.st || ((s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]));
     var head = $(".hd", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
@@ -1100,6 +1111,20 @@
       if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
     });
 
+    var vessel = vesselOf(traces);
+    if (vessel && isDel && !vessel.landed && traces[0]) vessel.landed = traces[0].time;
+    if (!settled) {
+      var route = buildRoute(n, s, traces, function () { if (el.isConnected) renderShipment(el, n, s, true); });
+      if (vessel) {
+        route.pending++;
+        (shipsP || loadShips()).then(function (by) {
+          var v = atLanding(by[vessel.name], vessel.landed);
+          route.vessel = v || null;
+          if (v && v.lat != null) route.ship = v;
+        }).catch(function () {}).then(function () { route.pending--; route.schedule(); });
+      }
+      return;
+    }
     var body = $('[data-role="body"]', el);
     var l = traces[0], ref = refCityOf(traces), dropped = routes[n] && routes[n].dropped;
     // Place = the newest event that could be located (same point as the map's current dot).
@@ -1131,25 +1156,17 @@
       var tr = moreBtn.parentNode, open = tr.classList.toggle("collapsed");
       moreBtn.textContent = open ? "展开全部 " + traces.length + " 条" : "收起";
     });
-    if (textOnly) {
-      var kept = routes[n] && routes[n].nowHtml, cur = $(".now", body);
-      if (kept) { if (cur) cur.outerHTML = kept; else body.insertAdjacentHTML("afterbegin", kept); }
-      return;
-    }
-    buildRoute(n, s, traces, shownKey(traces, ref, dropped), function () { if (el.isConnected) renderShipment(el, n, s, true); });
-    var vessel = vesselOf(traces);
-    if (vessel && isDel && !vessel.landed && traces[0]) vessel.landed = traces[0].time;
     var landedT = vessel && vessel.landed ? +parseTime(vessel.landed) : null;
     var onLand = isDel || (landedT != null && traces.some(function (t) { return +parseTime(t.time) > landedT && shownLoc(t, ref, dropped); }));
-    if (vessel) (shipsP || loadShips()).then(function (by) { if (el.isConnected) applyShip(el, n, vessel.name, atLanding(by[vessel.name], vessel.landed), onLand); });
+    if (vessel && !onLand) shipNow(body, vessel.name, routes[n] && routes[n].vessel);
   }
   function fmtUtc(t) {
     var d = t ? new Date(t) : null, p = function (x) { return (x < 10 ? "0" : "") + x; };
     return d && !isNaN(d) ? p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()) : "";
   }
-  function applyShip(el, n, name, v, onLand) {
-    if (onLand) { if (v && v.lat != null && routes[n]) { routes[n].ship = v; paintRoute(n); } return; }
-    var body = $('[data-role="body"]', el), old = $(".now", body);
+  // The card's top line while the parcel is on a vessel.
+  function shipNow(body, name, v) {
+    var old = $(".now", body);
     var has = v && v.lat != null;
     var link = v && v.link || "https://www.vesselfinder.com/vessels?name=" + encodeURIComponent(name);
     var bits = [];
@@ -1164,8 +1181,6 @@
       (has ? ' <span class="t">' + esc(fmtUtc(v.time)) + '</span>' : '') + '</span>' +
       '<a class="km" href="' + esc(link) + '" target="_blank" rel="noopener">船位 ↗</a></div>';
     if (old) old.outerHTML = html; else body.insertAdjacentHTML("afterbegin", html);
-    if (routes[n]) routes[n].nowHtml = html;
-    if (has && routes[n]) { routes[n].ship = v; paintRoute(n); if (sel === n) focusRoute(n, false); }
   }
 
   // ---- 17TRACK via the Worker: anything the two forwarders do not know ----
