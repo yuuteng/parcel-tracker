@@ -165,7 +165,7 @@ function normName(s) {
 function cleanState(s, name) {
   const nums = x => Array.isArray(x) ? [...new Set(x.map(v => String(v).trim().toUpperCase()).filter(v => NUM_RE.test(v)))].slice(0, LIST_MAX) : [];
   const out = { name: String((s && s.name) || name || "").normalize("NFC").trim().replace(/\s+/g, " ").slice(0, NAME_MAX),
-                numbers: nums(s && s.numbers), hidden: nums(s && s.hidden), delivered: {}, order: nums(s && s.order), links: {}, updated: 0 };
+                numbers: nums(s && s.numbers), hidden: nums(s && s.hidden), archived: nums(s && s.archived), delivered: {}, order: nums(s && s.order), links: {}, updated: 0 };
   const d = (s && s.delivered) || {};
   for (const k of Object.keys(d)) { const K = String(k).toUpperCase(), t = +d[k]; if (NUM_RE.test(K) && t > 0) out.delivered[K] = t; }
   out.links = {};
@@ -189,6 +189,7 @@ async function handleList(req, env, url, cors) {
     const uniq = a => [...new Set(a)];
     next.numbers = uniq(next.numbers.concat(old.numbers || []));
     next.hidden = uniq(next.hidden.concat(old.hidden || []));
+    next.archived = uniq(next.archived.concat(old.archived || []));
     for (const k of Object.keys(old.delivered || {})) if (!(next.delivered[k] > old.delivered[k])) next.delivered[k] = old.delivered[k];
     next.order = uniq(next.order.concat(old.order || []));
     for (const k of Object.keys(old.links || {})) if (!(k in next.links)) next.links[k] = old.links[k];
