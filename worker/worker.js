@@ -349,8 +349,8 @@ async function checkWatched(env) {
       no, done, carrier: carrierOf(no, links[no], src), verdict: verdictOf(traces[0].info, done), city: cityOf(traces[0]),
       days: Math.max(0, Math.round((end - toMs(traces[traces.length - 1].time)) / 86400000)),
       due: !done && d && d.due ? dayLabel(d.due) : null,
-      events: traces.slice(0, Math.max(3, Math.min(fresh.length, 6))),
-      older: traces.length - Math.max(3, Math.min(fresh.length, 6))
+      events: traces.slice(0, Math.max(4, Math.min(fresh.length, 6))),
+      older: Math.max(0, traces.length - Math.max(4, Math.min(fresh.length, 6)))
     });
     if (done) delete w[no]; else w[no].seen = newest;
   }
@@ -365,33 +365,33 @@ async function checkWatched(env) {
 
 function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]); }
 // Amber palette; the dark one applies through prefers-color-scheme where the mail client supports it.
-const C = { page: "#f6f3ee", card: "#ffffff", border: "#ebe4d8", band: "#faf3e6", line: "#efe9df", ink: "#2b2418", ink2: "#5f564a", mute: "#9a9083", acc: "#c27c0e", dueBg: "#f3e3c4", dueInk: "#7a4a03", btnInk: "#ffffff" };
+const C = { page: "#f6f3ee", card: "#ffffff", border: "#ebe4d8", band: "#faf3e6", line: "#efe9df", ink: "#2b2418", ink2: "#5f564a", mute: "#9a9083", acc: "#c27c0e", dueBg: "#f3e3c4", dueInk: "#7a4a03" };
 const DARK_CSS = `@media (prefers-color-scheme: dark){
 .m-page{background:#14110c!important}.m-card{background:#1d1912!important;border-color:#332b1f!important}
 .m-band{background:#251e14!important;border-color:#2c251a!important}.m-ink{color:#f3ece0!important}.m-ink2{color:#c9bea9!important}
 .m-mute{color:#8a7f6c!important}.m-acc{color:#f2a93b!important}.m-dot{background:#f2a93b!important}
-.m-due{background:#3d2f17!important;color:#ffd18a!important}.m-btn{background:#f2a93b!important;color:#1d1408!important}}`;
+.m-due{background:#3d2f17!important;color:#ffd18a!important}}`;
 const F = "-apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif", M = "Menlo,'SF Mono',Consolas,monospace";
 const T = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"';
 
-function cardHtml(c) {
+function cardHtml(c, page) {
   const top = c.events[0], info = top.info.trim(), showInfo = info && info !== c.city;
-  const rest = c.events.slice(1).map(e => {
+  const rows = c.events.slice(1).map(e => {
     const city = cityOf(e), txt = e.info.trim() === city ? city : e.info + (city ? " · " + city : "");
     return `<tr><td width="1" valign="top" class="m-mute" style="padding:7px 12px 0 0;font-family:${M};font-size:12px;color:${C.mute};white-space:nowrap">${esc(e.time.slice(5, 16))}</td><td class="m-ink2" style="padding:6px 0 0;font-size:13px;color:${C.ink2}">${esc(txt)}</td></tr>`;
   }).join("");
+  const more = (c.older > 0 ? `… 更早 ${c.older} 条记录 · ` : "") + `<a href="${page}" class="m-acc" style="color:${C.acc};text-decoration:none;font-weight:600">在页面查看</a>`;
   return `${T} class="m-card" style="background:${C.card};border:1px solid ${C.border};border-radius:14px;margin-bottom:12px">
 <tr><td class="m-band" style="background:${C.band};border-bottom:1px solid ${C.line};padding:11px 20px;border-radius:14px 14px 0 0">${T}><tr>
 <td class="m-mute" style="font-family:${M};font-size:12.5px;color:${C.mute}"><span class="m-acc" style="color:${C.acc}">${esc(c.no)}</span> · ${esc(c.carrier)}</td>
 <td align="right" class="m-mute" style="font-size:12px;color:${C.mute};white-space:nowrap">${c.done ? "用时" : "在途"} ${c.days} 天</td></tr></table></td></tr>
 <tr><td style="padding:16px 20px 4px">
-<div class="m-ink" style="font-size:21px;line-height:1.3;font-weight:700;color:${C.ink}"><span class="m-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.acc};margin:0 11px 3px 2px;vertical-align:middle"></span>${esc(c.verdict)}${c.city ? `<span class="m-ink2" style="font-weight:500;color:${C.ink2}"> · ${esc(c.city)}</span>` : ""}</div>
+<div class="m-ink" style="font-size:21px;line-height:1.3;font-weight:700;color:${C.ink}"><span class="m-dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${C.acc};margin:0 11px 3px 2px;vertical-align:middle"></span>${esc(c.verdict)}<span class="m-acc" style="font-family:${M};font-size:15px;font-weight:500;color:${C.acc}"> · ${esc(top.time.slice(5, 16))}</span>${c.city ? `<span class="m-ink2" style="font-weight:500;color:${C.ink2}"> · ${esc(c.city)}</span>` : ""}</div>
 ${showInfo ? `<div class="m-ink2" style="font-size:13.5px;color:${C.ink2};margin-top:6px">${esc(info)}</div>` : ""}
-<div class="m-acc" style="font-family:${M};font-size:12px;color:${C.acc};margin-top:5px">${esc(top.time.slice(5, 16))}</div>
 ${c.due ? `<div style="margin-top:11px"><span class="m-due" style="display:inline-block;background:${C.dueBg};color:${C.dueInk};font-size:13px;font-weight:600;padding:5px 11px;border-radius:8px">约定送达 ${esc(c.due)}</span></div>` : ""}
 </td></tr>
-<tr><td style="padding:6px 20px 14px">${T}>${rest}
-${c.older > 0 ? `<tr><td colspan="2" class="m-mute" style="padding:9px 0 0;font-size:12.5px;color:${C.mute}">… 更早 ${c.older} 条记录 · <a href="${PAGE_URL}" class="m-acc" style="color:${C.acc};text-decoration:none;font-weight:600">在页面查看</a></td></tr>` : ""}
+<tr><td style="padding:6px 20px 14px">${T}>${rows}
+<tr><td colspan="2" class="m-mute" style="padding:9px 0 0;font-size:12.5px;color:${C.mute}">${more}</td></tr>
 </table></td></tr></table>`;
 }
 
@@ -404,8 +404,7 @@ async function sendMail(env, changes) {
   const page = PAGE_URL + "#u=" + encodeURIComponent(env.NOTIFY_OWNER || "teng");
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><style>${DARK_CSS}</style></head>
 <body class="m-page" style="margin:0;padding:0;background:${C.page}">${T} class="m-page" style="background:${C.page};font-family:${F}"><tr><td align="center" style="padding:20px 14px">
-<div style="max-width:560px;margin:0 auto;text-align:left">${changes.map(cardHtml).join("")}
-<div style="padding:4px 2px 0"><a href="${page}" class="m-btn" style="display:inline-block;background:${C.acc};color:${C.btnInk};text-decoration:none;font-size:13px;font-weight:600;padding:9px 16px;border-radius:8px">打开包裹追踪</a></div>
+<div style="max-width:560px;margin:0 auto;text-align:left">${changes.map(c => cardHtml(c, page)).join("")}
 </div></td></tr></table></body></html>`;
   const text = changes.map(c => `${c.no} · ${c.verdict}${c.city ? " · " + c.city : ""}${c.due ? "（约定送达 " + c.due + "）" : ""}\n` +
     c.events.map(e => `  ${e.time.slice(5, 16)}  ${e.info}${e.place ? " · " + e.place : ""}`).join("\n") + (c.older ? `\n  … 更早 ${c.older} 条记录` : "")).join("\n\n") + `\n\n${page}`;
