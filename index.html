@@ -1225,7 +1225,8 @@
             country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",
             traces: j.traces.map(function (t) {
               var m = String(t.info).match(/^【运输中-([一-龥]{2,8})】/);
-              return { time: t.time, info: t.info, place: t.place || (m && m[1]) || null };
+              var pl = /label created/i.test(t.info) ? null : t.place === "SZ" ? "深圳" : t.place;
+              return { time: t.time, info: t.info, place: pl || (m && m[1]) || null };
             })
           };
         }
