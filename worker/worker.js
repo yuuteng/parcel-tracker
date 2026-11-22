@@ -27,6 +27,7 @@
 
 const API = "https://api.17track.net/track/v2.2/";
 const HUALEI = "http://8.134.51.61:8082";
+const HUALEI_API = "http://8.134.51.61.sslip.io:8082";   // Workers refuse a bare IP in fetch
 const STATUS = {
   NotFound: ["未查到", ""], InfoReceived: ["已收单", "pick"], InTransit: ["运输中", "warn"],
   Expired: ["已过期", "bad"], AvailableForPickup: ["待取件", "warn"], OutForDelivery: ["派送中", "warn"],
@@ -272,7 +273,7 @@ async function srcNextsls(no) {
   return { delivered: s.status === "delivered", traces: (s.traces || []).map(t => ev(t.time, t.info, t.location)) };
 }
 async function srcHualei(no) {
-  const r = await fetch(HUALEI + "/selectTrack.htm?documentCode=" + encodeURIComponent(no));
+  const r = await fetch(HUALEI_API + "/selectTrack.htm?documentCode=" + encodeURIComponent(no));
   if (!r.ok) throw new Error("hualei HTTP " + r.status);
   const buf = await r.arrayBuffer();
   let text;
