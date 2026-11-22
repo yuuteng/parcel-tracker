@@ -1109,7 +1109,7 @@
 
   // Fills the card header and starts the route. The event list waits for the route and appears with it (settled).
   function renderShipment(el, n, s, settled) {
-    var st = s.st || ((s.source === "itdida" || s.source === "17track") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]));
+    var st = s.st || ((s.source === "itdida" || s.source === "17track" || s.source === "hualei") ? [s.status, s.statusCls] : (STATUS[s.status] || [s.status || "未知", ""]));
     var head = $(".hd", el);
     var traces = Array.isArray(s.traces) ? s.traces : [];
 
@@ -1218,6 +1218,17 @@
       .then(function (x) {
         var j = x.j || {};
         if (!x.ok || j.error) throw new Error("17track:" + (j.error || "HTTP error"));
+        if (j.source === "hualei" && j.traces && j.traces.length) {
+          var top = j.traces[0].info;
+          return {
+            source: "hualei", link: j.link, status: j.delivered ? "已签收" : itdidaLabel(top), statusCls: j.delivered ? "ok" : itdidaCls(top),
+            country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",
+            traces: j.traces.map(function (t) {
+              var m = String(t.info).match(/^【运输中-([一-龥]{2,8})】/);
+              return { time: t.time, info: t.info, place: t.place || (m && m[1]) || null };
+            })
+          };
+        }
         if (!j.traces || !j.traces.length) { var e = new Error(j.registered ? "17track 刚登记这个单号,一两分钟后点\"全部刷新\"" : "17track 也没有这个单号的轨迹"); e.notFound = true; throw e; }
         return {
           source: "17track", link: j.link, status: j.status, statusCls: j.statusCls,

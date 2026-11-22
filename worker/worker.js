@@ -26,6 +26,7 @@
 // Error codes: -18019902 = number not registered, -18019901 = already registered.
 
 const API = "https://api.17track.net/track/v2.2/";
+const HUALEI = "http://8.134.51.61:8082";
 const STATUS = {
   NotFound: ["未查到", ""], InfoReceived: ["已收单", "pick"], InTransit: ["运输中", "warn"],
   Expired: ["已过期", "bad"], AvailableForPickup: ["待取件", "warn"], OutForDelivery: ["派送中", "warn"],
@@ -56,7 +57,6 @@ export default {
       if (req.method !== "POST" || !env.RUN_KEY || req.headers.get("X-Run-Key") !== env.RUN_KEY) return json({ error: "forbidden" }, 403, cors);
       return json(await checkWatched(env), 200, cors);
     }
-    if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set" }, 500, cors);
     const no = (url.searchParams.get("no") || "").trim().toUpperCase();
     if (!/^[A-Z0-9]{6,40}$/.test(no)) return json({ error: "bad number" }, 400, cors);
 
@@ -64,6 +64,18 @@ export default {
     const cacheKey = new Request(url.origin + "/?no=" + no);
     const hit = await cache.match(cacheKey);
     if (hit) { const r = new Response(hit.body, hit); Object.entries(cors).forEach(([k, v]) => r.headers.set(k, v)); r.headers.set("X-Cache", "HIT"); return r; }
+
+    let hlErr = null;
+    const hl = await srcHualei(no).catch(e => { hlErr = String(e && e.message || e); return null; });
+    if (hl) {
+      const res = json({
+        no, source: "hualei", carrier: hl.product, country: COUNTRY[hl.country] || hl.country, delivered: hl.delivered,
+        traces: hl.traces, link: HUALEI + "/trackIndex.htm?documentCode=" + no
+      }, 200, { ...cors, "Cache-Control": "public, max-age=900" });
+      await cache.put(cacheKey, res.clone());
+      return res;
+    }
+    if (!env.TRACK17_TOKEN) return json({ error: "TRACK17_TOKEN not set", hualei: hlErr }, 500, cors);
 
     let registered = false;
     let info = await call17(env, "gettrackinfo", no);
@@ -78,6 +90,7 @@ export default {
 
     const out = normalize(no, info.accepted);
     out.registered = registered;
+    if (hlErr) out.hualei = hlErr;
     const res = json(out, 200, { ...cors, "Cache-Control": "public, max-age=300" });
     if (out.traces.length) await cache.put(cacheKey, res.clone());
     return res;
@@ -258,6 +271,23 @@ async function srcNextsls(no) {
   if (!s) return null;
   return { delivered: s.status === "delivered", traces: (s.traces || []).map(t => ev(t.time, t.info, t.location)) };
 }
+async function srcHualei(no) {
+  const r = await fetch(HUALEI + "/selectTrack.htm?documentCode=" + encodeURIComponent(no));
+  if (!r.ok) throw new Error("hualei HTTP " + r.status);
+  const buf = await r.arrayBuffer();
+  let text;
+  try { text = new TextDecoder("gbk").decode(buf); } catch (e) { text = new TextDecoder().decode(buf).replace(/\uFFFD+/g, " "); }
+  const x = (JSON.parse(text) || [])[0] || {};
+  const d = (x.data || [])[0];
+  const tl = (d && d.trackDetails) || [];
+  if (x.ack !== "true" || !tl.length) return null;
+  const traces = tl.map(t => ev(t.track_date, String(t.track_content || "").trim(), [t.track_location, t.track_city].filter(Boolean).join(", ")))
+    .filter(t => t.time).sort((a, b) => b.time.localeCompare(a.time));
+  return {
+    delivered: DELIVERED_RE.test(d.businessStatus || "") || DELIVERED_RE.test(traces[0].info),
+    product: d.productKindName || "", country: d.consigneeCountry || "", traces
+  };
+}
 async function srcItdida(nos) {
   const out = {};
   for (let i = 0; i < nos.length; i += 10) {
@@ -331,6 +361,7 @@ async function checkWatched(env) {
   for (const no of nos) {
     let s = await srcNextsls(no).catch(() => null), src = "nextsls";
     if (!s) { s = it[no] || null; src = "itdida"; }
+    if (!s) { s = await srcHualei(no).catch(() => null); src = "hualei"; }
     if (!s) { s = await src17(env, no).catch(() => null); src = "17track"; }
     const d = links[no] ? await srcDhl(env, links[no]).catch(() => null) : null;
     if (!s && !d) continue;
