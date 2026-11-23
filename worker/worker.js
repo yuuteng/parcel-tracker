@@ -353,13 +353,20 @@ function verdictOf(info, delivered) {
   return "运输中";
 }
 const CN_PLACE = /^[一-龥]{2,6}$/;
+const STATION = /^\s*现站[:：]\s*([^，,。]+)/;
 function cityOf(t) {
   if (t.place) {
     const c = t.place.split(",")[0].trim();
     return /[a-z]/.test(c) ? c : c.toLowerCase().replace(/(^|[\s-])\S/g, m => m.toUpperCase());
   }
+  const m = t.info.match(STATION) || t.info.match(/^【运输中-([一-龥]{2,8})】/);
+  if (m) return m[1].trim();
   return CN_PLACE.test(t.info.trim()) ? t.info.trim() : null;
 }
+// Event text without the "现站：X" part that cityOf already returns.
+const restOf = info => STATION.test(info)
+  ? info.replace(/^\s*现站[:：][^，。]*[，。]?\s*/, "").replace(/([^\d\s])(\d+)\s*km/i, "$1 $2 km").trim()
+  : info.trim();
 const WEEK = "日一二三四五六";
 const dayLabel = d => `${d.slice(5, 10)} 周${WEEK[new Date(d.slice(0, 10) + "T12:00:00Z").getUTCDay()]}`;
 const toMs = t => Date.UTC(+t.slice(0, 4), +t.slice(5, 7) - 1, +t.slice(8, 10), +t.slice(11, 13) || 0, +t.slice(14, 16) || 0);
@@ -422,9 +429,10 @@ const F = "-apple-system,'PingFang SC','Hiragino Sans GB','Segoe UI',sans-serif"
 const T = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"';
 
 function cardHtml(c, page) {
-  const top = c.events[0], info = top.info.trim(), showInfo = info && info !== c.city;
+  const top = c.events[0], info = restOf(top.info), showInfo = info && info !== c.city;
   const rows = c.events.slice(1).map(e => {
-    const city = cityOf(e), txt = e.info.trim() === city ? city : e.info + (city ? " · " + city : "");
+    const city = cityOf(e), rest = restOf(e.info);
+    const txt = STATION.test(e.info) ? city + (rest ? " · " + rest : "") : rest === city ? city : e.info + (city && !e.info.includes(city) ? " · " + city : "");
     return `<tr><td width="1" valign="top" class="m-mute" style="padding:7px 12px 0 0;font-family:${M};font-size:12px;color:${C.mute};white-space:nowrap">${esc(e.time.slice(5, 16))}</td><td class="m-ink2" style="padding:6px 0 0;font-size:13px;color:${C.ink2}">${esc(txt)}</td></tr>`;
   }).join("");
   const more = (c.older > 0 ? `… 更早 ${c.older} 条记录 · ` : "") + `<a href="${page}" class="m-acc" style="color:${C.acc};text-decoration:none;font-weight:600">在页面查看</a>`;
