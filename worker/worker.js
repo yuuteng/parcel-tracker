@@ -69,8 +69,10 @@ export default {
     let hlErr = null;
     const hl = await srcHualei(no).catch(e => { hlErr = String(e && e.message || e); return null; });
     if (hl) {
+      const to = hl.delivered || !env.TRACK17_TOKEN ? {} : await recipient17(env, no).catch(() => ({}));
       const res = json({
         no, source: "hualei", carrier: hl.product, country: COUNTRY[hl.country] || hl.country, delivered: hl.delivered,
+        city: to.city || "", postcode: to.postal_code || "",
         traces: hl.traces, link: HUALEI + "/trackIndex.htm?documentCode=" + no
       }, 200, { ...cors, "Cache-Control": "public, max-age=900" });
       await cache.put(cacheKey, res.clone());
@@ -110,6 +112,19 @@ async function call17(env, method, no) {
   const rej = (j.data && j.data.rejected || [])[0];
   if (acc) return { accepted: acc };
   return { rejected: (rej && rej.error) || { code: -1, message: "empty response" } };
+}
+
+// Recipient city and postcode as 17track has them; registers the number when it is new.
+async function recipient17(env, no) {
+  let info = await call17(env, "gettrackinfo", no);
+  if (info.rejected && info.rejected.code === -18019902) {
+    const reg = await call17(env, "register", no);
+    if (reg.rejected && reg.rejected.code !== -18019901) return {};
+    await new Promise(r => setTimeout(r, 2500));
+    info = await call17(env, "gettrackinfo", no);
+  }
+  const ship = info.accepted && info.accepted.track_info && info.accepted.track_info.shipping_info;
+  return (ship && ship.recipient_address) || {};
 }
 
 function normalize(no, acc) {
