@@ -790,7 +790,7 @@
         if (guess) a = (a || []).filter(function (h) { return placeLike(h, name); }).slice(0, 1);
         var hit = a && a[0], ad = hit && hit.address || {};
         if (!hit) return null;
-        var r = { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null };
+        var r = { ll: [parseFloat(hit.lat), parseFloat(hit.lon)], town: ad.town || ad.city || ad.village || ad.municipality || null, postcode: ad.postcode || null };
         if (a.length > 1) r.alts = a.map(function (h) { return [parseFloat(h.lat), parseFloat(h.lon)]; });
         return r;
       });
@@ -1130,7 +1130,7 @@
     if (isArchived(n) && !showArchived && !kept[n]) { archiveNow(el, n); return; }
 
     var meta = [];
-    if (s.source && s.source !== "hualei") meta.push(s.source);
+    if (s.source) meta.push(s.source);
     if (s.outer_carrier_code) meta.push(s.outer_carrier_code);
     var destText = s.country ? countryEn(s.country) + (s.postcode ? " " + s.postcode : s.city ? " " + s.city : "") : "";
     if (destText) meta.push(destText);
@@ -1140,6 +1140,10 @@
     if (s.postcode && s.country) lookup(s.postcode + " " + countryEn(s.country)).then(function (r) {
       if (r && r.town) metaEl.textContent = meta.map(function (m) { return m === destText ? destText + " " + r.town : m; }).join(" · ");
     });
+
+    else if (s.city && s.country) nominatim(s.city + ", " + countryEn(s.country)).then(function (r) {
+      if (r && r.postcode) metaEl.textContent = meta.map(function (m) { return m === destText ? countryEn(s.country) + " " + r.postcode + " " + s.city : m; }).join(" · ");
+    }).catch(function () {});
 
     var vessel = vesselOf(traces);
     if (vessel && isDel && !vessel.landed && traces[0]) vessel.landed = traces[0].time;
@@ -1225,7 +1229,7 @@
           var top = j.traces[0].info;
           return {
             source: "hualei", link: j.link, status: j.delivered ? "已签收" : itdidaLabel(top), statusCls: j.delivered ? "ok" : itdidaCls(top),
-            country: j.country || "", postcode: j.postcode || "", product: j.carrier || "", city: String(j.city || "").toLowerCase().replace(/(^|[\s-])\S/g, function (c) { return c.toUpperCase(); }), parcel_count: 0, outer_carrier_code: /^1Z/.test(n) ? "UPS" : j.carrier || "",
+            country: j.country || "", postcode: j.postcode || "", product: j.carrier || "", city: String(j.city || "").toLowerCase().replace(/(^|[\s-])\S/g, function (c) { return c.toUpperCase(); }), parcel_count: 0, outer_carrier_code: "",
             traces: j.traces.map(function (t) {
               var m = String(t.info).match(/^【运输中-([一-龥]{2,8})】/);
               var pl = /created a label/i.test(t.info) ? null : t.place === "SZ" ? "深圳" : t.place;
