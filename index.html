@@ -429,6 +429,7 @@
   var delivered = {};
   // number → linked last-mile number, entered by hand
   var links = {};
+  var kept = {};
   function isManual(n) { return archived.indexOf(n) >= 0; }
   function isArchived(n) { return isManual(n) || (!!delivered[n] && Date.now() - delivered[n] > ARCHIVE_DAYS * 86400000); }
   function setState(st) { numbers = st.numbers || []; hidden = st.hidden || []; archived = st.archived || []; order = st.order || []; delivered = st.delivered || {}; links = st.links || {}; base = st.updated || 0; }
@@ -499,7 +500,7 @@
   function enter(name, cb) {
     var disp = String(name || "").normalize("NFC").trim().replace(/\s+/g, " "), key = normName(disp);
     if (!key) return;
-    who = disp; whoKey = key; store(USER_KEY, who);
+    who = disp; whoKey = key; kept = {}; store(USER_KEY, who);
     var rec = read(RECENT_KEY, []).filter(function (x) { return normName(x) !== key; }); rec.unshift(who); store(RECENT_KEY, rec.slice(0, 6)); recent();
     setMe();
     var local = read(STATE_KEY + key, null);
@@ -1126,7 +1127,7 @@
     if (isDel && last) delivered[n] = last.getTime(); else delete delivered[n];
     persist();
     el.classList.toggle("arch", isArchived(n)); el.classList.toggle("man", isManual(n));
-    if (isArchived(n) && !showArchived) { archiveNow(el, n); return; }
+    if (isArchived(n) && !showArchived && !kept[n]) { archiveNow(el, n); return; }
 
     var meta = [];
     if (s.source) meta.push(s.source);
@@ -1227,7 +1228,7 @@
             country: j.country || "", postcode: "", parcel_count: 0, outer_carrier_code: j.carrier || "",
             traces: j.traces.map(function (t) {
               var m = String(t.info).match(/^【运输中-([一-龥]{2,8})】/);
-              var pl = /label created/i.test(t.info) ? null : t.place === "SZ" ? "深圳" : t.place;
+              var pl = /created a label/i.test(t.info) ? null : t.place === "SZ" ? "深圳" : t.place;
               return { time: t.time, info: t.info, place: pl || (m && m[1]) || null };
             })
           };
@@ -1260,8 +1261,8 @@
   }
   function allNumbers() {
     var all = eligible();
-    var arch = all.filter(isArchived);
-    all = all.filter(function (n) { return !isArchived(n); });
+    var arch = all.filter(function (n) { return isArchived(n) && !kept[n]; });
+    all = all.filter(function (n) { return !isArchived(n) || kept[n]; });
     if (order.length) {
       var known = order.filter(function (n) { return all.indexOf(n) >= 0; });
       var fresh = all.filter(function (n) { return known.indexOf(n) < 0; });
@@ -1517,7 +1518,7 @@
   }
   function toggleArchived() {
     showArchived = !showArchived;
-    var arch = eligible().filter(isArchived);
+    var arch = eligible().filter(function (n) { return isArchived(n) && !kept[n]; });
     if (showArchived) {
       var empty = $(".empty", list); if (empty) empty.remove();
       arch.forEach(function (n, i) { addCard(n); var el = list.querySelector('.card[data-n="' + n + '"]'); if (el) enterAnim(el, i); });
@@ -1549,21 +1550,24 @@
     var raw = $("#input").value.trim().toUpperCase();
     if (!raw) return;
     if (!whoKey) { openSheet(true); return; }
-    var fresh = [];
+    var fresh = [], seen = [];
     raw.split(/[\s,，;；]+/).forEach(function (n) {
       if (!n) return;
+      seen.push(n);
       hidden = hidden.filter(function (x) { return x !== n; });
       var was = isManual(n);
       archived = archived.filter(function (x) { return x !== n; });
+      kept[n] = 1;
       if (numbers.indexOf(n) < 0) { numbers.unshift(n); fresh.push(n); }
       else if (was) fresh.push(n);
     });
     if (fresh.length) { fresh.forEach(function (n) { var c = list.querySelector('.card[data-n="' + n + '"]'); if (c) { c.remove(); dropRoute(n); } }); }
     $("#input").value = ""; persist();
-    fresh.forEach(addCard); stamp();
-    if (fresh.length) {
-      var el = list.querySelector('.card[data-n="' + fresh[0] + '"]');
-      if (el) { select(fresh[0]); el.scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "nearest" }); }
+    seen.forEach(addCard); stamp();
+    var first = seen[0], el = first && list.querySelector('.card[data-n="' + first + '"]');
+    if (el) {
+      select(first); el.scrollIntoView({ behavior: calm() ? "auto" : "smooth", block: "nearest" });
+      if (fresh.indexOf(first) < 0 && !calm()) el.animate([{ boxShadow: "0 0 0 0 var(--acc)" }, { boxShadow: "0 0 0 5px var(--acc)" }, { boxShadow: "0 0 0 0 var(--acc)" }], { duration: 700, easing: EASE });
     }
   }
   $("#add").addEventListener("click", add);
