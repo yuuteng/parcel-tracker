@@ -278,7 +278,7 @@
   var WORKER_URL = "https://parcel-17track.yuuteng.workers.dev";
   // Pre-name storage, imported once into the first name used on this device.
   var KEY = "parcel-tracker.numbers.v1", HIDE_KEY = "parcel-tracker.hidden.v1", DELIVERED_KEY = "parcel-tracker.delivered.v1", ORDER_KEY = "parcel-tracker.order.v1";
-  var GEO_KEY = "parcel-tracker.geo.v4";
+  var GEO_KEY = "parcel-tracker.geo.v5";
   var ARCHIVE_DAYS = 5;
   var USER_KEY = "parcel-tracker.user.v1", RECENT_KEY = "parcel-tracker.users.v1", MIGRATED_KEY = "parcel-tracker.migrated.v1";
   var STATE_KEY = "parcel-tracker.state.v2:";
@@ -738,7 +738,7 @@
 
   // ---- geocoding with a serial queue, 1.1 s apart, cached ----
   var geoCache = read(GEO_KEY, {});
-  try { localStorage.removeItem("parcel-tracker.geo.v3"); } catch (e) {}
+  try { localStorage.removeItem("parcel-tracker.geo.v4"); } catch (e) {}
   var queue = [], busy = false, inflight = {};
   var MISS_TTL = 7 * 86400000; // a name nobody could place is retried after a week
   var GEO_TIMEOUT = 12000;
@@ -781,8 +781,11 @@
       .then(function (r) { return r || (job.guess || /,\s*[A-Z]{2}$/.test(job.name) ? null : wikipedia(job.name)); })
       .then(function (r) { finish(r, true); }, function () { finish(null, false); });
   }
+  var COUNTRY_CC = { "france": "FR", "germany": "DE", "belgium": "BE", "netherlands": "NL", "spain": "ES", "italy": "IT", "united kingdom": "GB", "poland": "PL", "china": "CN" };
   function nominatim(name, guess) {
     var cc = name.match(/^(.+?),\s*([A-Z]{2})$/), q = cc ? cc[1] : name;
+    var cn = !cc && name.match(/^(.+?),\s*([A-Za-z ]{4,})$/);
+    if (cn && COUNTRY_CC[cn[2].toLowerCase()]) cc = [0, cn[1], COUNTRY_CC[cn[2].toLowerCase()]];
     var extra = (cc ? "&limit=5&countrycodes=" + cc[2].toLowerCase() : guess ? "&limit=5" : "&limit=1") + (guess ? "&namedetails=1" : "");
     return fetch("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&accept-language=en" + extra + "&q=" + encodeURIComponent(q), { cache: "force-cache" })
       .then(function (r) { return r.json(); })
