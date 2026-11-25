@@ -877,9 +877,12 @@
     var dim = sel != null && sel !== n, op = dim ? .35 : 1;
     var acc = v("--acc-mark"), here = v("--here"), ring = v("--panel");
     r.layer.clearLayers();
-    if (r.dest) r.pts.forEach(function (p) {
-      if (r.destTown && townKey(p.place) === townKey(r.destTown)) p.ll = r.dest;
-      else if (p.alts) p.ll = nearest(p.alts, r.dest);
+    var firm = r.pts.filter(function (p) { return !p.alts; });
+    r.pts.forEach(function (p) {
+      if (r.dest && r.destTown && townKey(p.place) === townKey(r.destTown)) { p.ll = r.dest; return; }
+      if (!p.alts) return;
+      var near = r.dest || (firm.slice().sort(function (a, b) { return Math.abs(a.i - p.i) - Math.abs(b.i - p.i); })[0] || {}).ll;
+      if (near) p.ll = nearest(p.alts, near);
     });
     var all0 = r.pts.slice().sort(function (a, b) { return a.i - b.i; });
     var sorted = sane(all0, r.dest);
@@ -1232,7 +1235,7 @@
           var top = j.traces[0].info;
           return {
             source: "hualei", link: j.link, status: j.delivered ? "已签收" : itdidaLabel(top), statusCls: j.delivered ? "ok" : itdidaCls(top),
-            country: j.country || "", postcode: j.postcode || "", product: j.carrier || "", city: String(j.city || "").toLowerCase().replace(/(^|[\s-])\S/g, function (c) { return c.toUpperCase(); }), parcel_count: 0, outer_carrier_code: "",
+            country: j.country || "", postcode: j.postcode || "", product: j.carrier || "", city: String(j.city || (j.delivered && /^delivered/i.test(top) && String(j.traces[0].place || "").replace(/,\s*[A-Za-z ]+$/, "")) || "").toLowerCase().replace(/(^|[\s-])\S/g, function (c) { return c.toUpperCase(); }), parcel_count: 0, outer_carrier_code: "",
             traces: j.traces.map(function (t) {
               var m = String(t.info).match(/^【运输中-([一-龥]{2,8})】/);
               var pl = /created a label/i.test(t.info) ? null : t.place === "SZ" ? "深圳" : t.place;
